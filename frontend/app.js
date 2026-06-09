@@ -624,6 +624,9 @@ function showReport(report) {
   // Render Charts
   renderSeverityChart(sev);
   renderOwaspChart(m.owaspCounts);
+  
+  // Update AI Detective assessment panel
+  updateAiAnalysisPanel(report);
 }
 
 // ==========================================================================
@@ -877,4 +880,283 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+// ==========================================================================
+// AI Detective Feature Logic
+// ==========================================================================
+
+/**
+ * Updates the AI Detective Analysis card based on whether the report contains AI insights.
+ */
+function updateAiAnalysisPanel(report) {
+  const aiCard = document.getElementById('report-ai-card');
+  const aiLaunch = document.getElementById('ai-analysis-launch');
+  const aiDetails = document.getElementById('ai-analysis-details');
+  const aiModeBadge = document.getElementById('ai-mode-badge');
+  const aiSummaryBox = document.getElementById('ai-summary-box');
+  const aiTimelineBox = document.getElementById('ai-timeline-box');
+  const aiPriorityBox = document.getElementById('ai-priority-box');
+
+  if (!aiCard) return;
+
+  // Show the AI Card section
+  aiCard.style.display = 'block';
+
+  if (report.aiAnalysis) {
+    if (aiLaunch) aiLaunch.style.display = 'none';
+    if (aiDetails) aiDetails.style.display = 'block';
+
+    // Update API mode badge
+    if (aiModeBadge) {
+      if (report.aiAnalysis.isMock) {
+        aiModeBadge.textContent = 'Demo Mode (Mock)';
+        aiModeBadge.className = 'badge warning';
+      } else {
+        aiModeBadge.textContent = 'Claude 3.5 Sonnet';
+        aiModeBadge.className = 'badge success';
+      }
+    }
+
+    // Render Executive Summary
+    if (aiSummaryBox) {
+      aiSummaryBox.innerHTML = renderMarkdown(report.aiAnalysis.executiveSummary);
+    }
+
+    // Render Threat Chain Timeline
+    if (aiTimelineBox) {
+      aiTimelineBox.innerHTML = '';
+      const narrative = report.aiAnalysis.attackNarrative;
+
+      // Extract narrative steps matching "**Step X: Title**\nDescription"
+      const stepRegex = /\*\*Step\s+(\d+):\s*(.*?)\*\*\s*\n+([\s\S]*?)(?=(?:\*\*Step\s+\d+:)|(?:\*\*Impact Assessment:)|$)/gi;
+      let match;
+      const steps = [];
+      const cleanNarrative = narrative.replace(/^###.*?\n/, '').replace(/^A penetration tester.*?\n/, '');
+
+      while ((match = stepRegex.exec(cleanNarrative)) !== null) {
+        steps.push({
+          num: match[1],
+          title: match[2],
+          description: match[3].trim()
+        });
+      }
+
+      if (steps.length > 0) {
+        steps.forEach(step => {
+          const stepEl = document.createElement('div');
+          stepEl.className = 'ai-timeline-step';
+          stepEl.innerHTML = `
+            <div class="ai-step-title">Step ${step.num}: ${step.title}</div>
+            <div class="ai-step-desc">${renderMarkdown(step.description)}</div>
+          `;
+          aiTimelineBox.appendChild(stepEl);
+        });
+
+        // Check for impact assessment
+        const impactMatch = cleanNarrative.match(/\*\*Impact Assessment:\*\*\s*([\s\S]*)$/i) || cleanNarrative.match(/Impact Assessment:\s*([\s\S]*)$/i);
+        if (impactMatch) {
+          const impactEl = document.createElement('div');
+          impactEl.className = 'ai-timeline-step';
+          impactEl.style.borderLeft = '2px solid var(--color-critical)';
+          impactEl.style.background = 'rgba(239, 68, 68, 0.03)';
+          impactEl.innerHTML = `
+            <div class="ai-step-title" style="color: var(--color-critical);">Impact Assessment</div>
+            <div class="ai-step-desc" style="font-weight: 500;">${renderMarkdown(impactMatch[1].trim())}</div>
+          `;
+          aiTimelineBox.appendChild(impactEl);
+        }
+      } else {
+        // Fallback: render narrative as a single block
+        aiTimelineBox.innerHTML = `<div class="ai-step-desc">${renderMarkdown(narrative)}</div>`;
+      }
+    }
+
+    // Render Remediation Rankings
+    if (aiPriorityBox) {
+      aiPriorityBox.innerHTML = '';
+      const rankings = report.aiAnalysis.remediationRanking;
+
+      if (Array.isArray(rankings) && rankings.length > 0) {
+        rankings.forEach(item => {
+          const rank = parseInt(item.rank);
+          let rankClass = 'rank-other';
+          let badgeText = 'LOW PRIORITY';
+
+          if (rank === 1) {
+            rankClass = 'rank-1';
+            badgeText = 'CRITICAL PRIORITY';
+          } else if (rank === 2) {
+            rankClass = 'rank-2';
+            badgeText = 'HIGH PRIORITY';
+          } else if (rank === 3) {
+            rankClass = 'rank-3';
+            badgeText = 'MEDIUM PRIORITY';
+          }
+
+          const card = document.createElement('div');
+          card.className = `ai-priority-card ${rankClass}`;
+          card.innerHTML = `
+            <div class="ai-prio-header">
+              <div class="ai-prio-title">Priority #${rank}</div>
+              <span class="ai-prio-badge">${badgeText}</span>
+            </div>
+            <div class="ai-prio-title" style="margin-top: 4px; font-weight: 700; color: var(--text-main);">${escapeHtml(item.title)}</div>
+            <div class="ai-prio-loc" style="font-size: 11.5px; font-family: monospace; color: var(--text-muted); margin-bottom: 4px;">Location: ${escapeHtml(item.location || '')}</div>
+            <div class="ai-prio-reason">${renderMarkdown(item.reasoning)}</div>
+          `;
+          aiPriorityBox.appendChild(card);
+        });
+      } else {
+        aiPriorityBox.innerHTML = `<div class="empty-state"><p>No items ranked for remediation.</p></div>`;
+      }
+    }
+  } else {
+    // Hide details, show launch prompt
+    if (aiLaunch) {
+      aiLaunch.style.display = 'block';
+      // Reset button inside launch in case it was left disabled
+      const launchBtn = document.getElementById('btn-launch-ai-audit');
+      if (launchBtn) {
+        launchBtn.disabled = false;
+        launchBtn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Launch AI Security Audit`;
+      }
+    }
+    if (aiDetails) aiDetails.style.display = 'none';
+    if (aiModeBadge) {
+      aiModeBadge.textContent = 'Ready';
+      aiModeBadge.className = 'badge info';
+    }
+  }
+}
+
+/**
+ * Triggers the AI audit generation by executing API and simulating logs.
+ */
+async function launchAiAudit() {
+  if (!currentReport) return;
+
+  const aiLaunch = document.getElementById('ai-analysis-launch');
+  if (!aiLaunch) return;
+
+  const originalHtml = aiLaunch.innerHTML;
+
+  // Render simulated log console
+  aiLaunch.innerHTML = `
+    <div class="ai-launch-inner" style="width: 100%; text-align: left; max-width: 650px;">
+      <h3 style="text-align: center; margin-bottom: 15px; font-family: 'Outfit', sans-serif;">
+        <i class="fa-solid fa-circle-notch fa-spin" style="color: var(--color-accent); margin-right: 8px;"></i>
+        AI Detective Threat Assessment in Progress
+      </h3>
+      <div id="ai-terminal-logs" style="height: 180px; background: #05070f; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; font-family: 'Fira Code', monospace; font-size: 11.5px; overflow-y: auto; color: #cbd5e1; box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);">
+        <div style="color: var(--color-accent);">[INIT] Preparing security context parameters...</div>
+      </div>
+    </div>
+  `;
+
+  const logBox = document.getElementById('ai-terminal-logs');
+  function addLog(text, logClass = '') {
+    if (!logBox) return;
+    const line = document.createElement('div');
+    line.className = logClass;
+    line.style.margin = '4px 0';
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+    logBox.appendChild(line);
+    logBox.scrollTop = logBox.scrollHeight;
+
+    // Log to the main hub terminal feed if it exists
+    writeConsoleLog(text, logClass);
+  }
+
+  // Simulated steps
+  const steps = [
+    { text: 'Establishing Anthropic API secure pipeline (Claude 3.5 Sonnet)...', delay: 400 },
+    { text: 'Retrieving local report JSON and parsing vulnerability catalog...', delay: 800 },
+    { text: 'Building security graph vectors and taint flow correlations...', delay: 1300 },
+    { text: 'Analyzing CWE mappings and chaining vector Entry Points...', delay: 1800 },
+    { text: 'Generating realistic penetration scenario narratives...', delay: 2400 },
+    { text: 'Compiling prioritized remediation checklists with business context...', delay: 3000 },
+    { text: 'Integrating AI assessments into Markdown and PDF reports...', delay: 3600 }
+  ];
+
+  const timeouts = [];
+  steps.forEach(s => {
+    const t = setTimeout(() => {
+      addLog(`[AI DETECTIVE] ${s.text}`);
+    }, s.delay);
+    timeouts.push(t);
+  });
+
+  const startTime = Date.now();
+
+  try {
+    const res = await fetch(`${API_BASE}/api/scan/${currentReport.id}/ai-analyze`, {
+      method: 'POST'
+    });
+
+    const data = await res.json();
+    const elapsed = Date.now() - startTime;
+    const minPlayTime = 4200; // Let simulator play out
+    const remainingTime = Math.max(0, minPlayTime - elapsed);
+
+    setTimeout(() => {
+      if (data.success) {
+        addLog('[SUCCESS] Threat assessment generated and synchronized.', 'success');
+        setTimeout(() => {
+          timeouts.forEach(clearTimeout);
+          // Reload report details
+          viewReportDetails(currentReport.id);
+        }, 1000);
+      } else {
+        throw new Error(data.message || 'Server returned failure status.');
+      }
+    }, remainingTime);
+
+  } catch (err) {
+    timeouts.forEach(clearTimeout);
+    addLog(`[ERROR] AI Audit failed: ${err.message}`, 'error');
+    alert(`AI Analysis Error: ${err.message}`);
+    setTimeout(() => {
+      aiLaunch.innerHTML = originalHtml;
+    }, 3000);
+  }
+}
+
+/**
+ * Basic markdown parser/renderer translating bold, headings, lists, inline code and paragraphs.
+ */
+function renderMarkdown(mdStr) {
+  if (!mdStr || typeof mdStr !== 'string') return '';
+
+  let html = escapeHtml(mdStr);
+
+  // Inline Code: `code`
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  // Bold: **text**
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+  // Headings: ###, ##, #
+  html = html.replace(/^### (.*$)/gim, '<h4>$1</h4>');
+  html = html.replace(/^## (.*$)/gim, '<h3>$1</h3>');
+  html = html.replace(/^# (.*$)/gim, '<h2>$1</h2>');
+
+  // List Items: * item or - item
+  html = html.replace(/^\s*[-*]\s+(.*$)/gim, '<li>$1</li>');
+
+  // Parse paragraphs and list containers
+  const blocks = html.split(/\n\n+/);
+  html = blocks.map(block => {
+    block = block.trim();
+    if (!block) return '';
+    if (block.startsWith('<h') || block.startsWith('<li>')) {
+      return block;
+    }
+    if (block.includes('<li>')) {
+      return `<ul>${block}</ul>`;
+    }
+    return `<p>${block.replace(/\n/g, '<br>')}</p>`;
+  }).join('\n');
+
+  return html;
 }

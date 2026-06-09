@@ -111,7 +111,7 @@ router.delete('/:id', (req, res, next) => {
  * @route GET /api/reports/:id/download
  * @desc Download report in specified format (html, markdown, json)
  */
-router.get('/:id/download', (req, res, next) => {
+router.get('/:id/download', async (req, res, next) => {
   const format = (req.query.format || 'json').toLowerCase();
   const jsonPath = getReportFilePath(req.params.id, 'json');
 
@@ -138,10 +138,10 @@ router.get('/:id/download', (req, res, next) => {
       res.setHeader('Content-Disposition', `attachment; filename="${reportData.projectName}-security-report.html"`);
       return res.send(htmlContent);
     } else if (format === 'doc' || format === 'docx') {
-      const docContent = buildDocReport(reportData);
-      res.setHeader('Content-Type', 'application/msword');
-      res.setHeader('Content-Disposition', `attachment; filename="${reportData.projectName}-security-report.doc"`);
-      return res.send(docContent);
+      const docBuffer = await buildDocReport(reportData);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      res.setHeader('Content-Disposition', `attachment; filename="${reportData.projectName}-security-report.docx"`);
+      return res.send(docBuffer);
     } else {
       // Default: send raw JSON
       res.setHeader('Content-Type', 'application/json');

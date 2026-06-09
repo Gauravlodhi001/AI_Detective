@@ -347,6 +347,49 @@
 
         </div>
 
+        <!-- AI Audit Section -->
+        <div class="content-card" id="report-ai-card" style="display: none;">
+          <div class="ai-header-row">
+            <div class="ai-badge-title">
+              <i class="fa-solid fa-user-secret ai-icon-detective"></i>
+              <h2>AI Detective Threat Insights</h2>
+            </div>
+            <span class="badge success" id="ai-mode-badge">Claude 3.5 Sonnet</span>
+          </div>
+          
+          <!-- AI Content Box (Shown if AI Analysis is present) -->
+          <div class="ai-analysis-content" id="ai-analysis-details" style="display: none;">
+            <div class="ai-grid-panels">
+              <!-- Executive Summary & Attack Chain Timeline -->
+              <div class="ai-left-panel">
+                <div class="detail-section-title">AI Executive Summary</div>
+                <div class="ai-summary-text" id="ai-summary-box"></div>
+                
+                <div class="detail-section-title" style="margin-top:20px;">Threat Chain Analysis</div>
+                <div class="ai-timeline" id="ai-timeline-box"></div>
+              </div>
+              
+              <!-- Remediation Priority list -->
+              <div class="ai-right-panel">
+                <div class="detail-section-title">AI Remediation Priority Rankings</div>
+                <div class="ai-priority-list" id="ai-priority-box"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Launch AI Card (Shown if AI Analysis is NOT present) -->
+          <div class="ai-launch-box" id="ai-analysis-launch">
+            <div class="ai-launch-inner">
+              <i class="fa-solid fa-magnifying-glass-chart ai-launch-icon"></i>
+              <h3>Audit Codebase with AI Detective</h3>
+              <p>Trigger Claude 3.5 Sonnet to chain findings into realistic hacker exploit scenarios, model threat entry vectors, and compile prioritized mitigation checklists.</p>
+              <button class="btn btn-primary btn-lg mt-15" id="btn-launch-ai-audit" onclick="launchAiAudit()">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Launch AI Security Audit
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- Chart Analytics Card Row -->
         <div class="charts-row-grid">
           <div class="chart-container-card content-card">

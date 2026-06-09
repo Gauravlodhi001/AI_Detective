@@ -5,7 +5,8 @@ const path = require('path');
 const fs = require('fs');
 const AdmZip = require('adm-zip');
 const { cloneRepo } = require('../utils/gitClone');
-const { buildReport } = require('../parsers/report_builder');
+const { buildReport, buildMarkdownReport } = require('../parsers/report_builder');
+const { generateAiAnalysis } = require('../utils/aiAnalyzer');
 
 // Configure multer for temporary zip storage
 const upload = multer({
@@ -141,6 +142,45 @@ router.post('/git', async (req, res, next) => {
   } finally {
     // Clean up cloned folder
     setTimeout(() => safeCleanup(tempCloneDir), 2000);
+  }
+});
+
+/**
+ * @route POST /api/scan/:id/ai-analyze
+ * @desc Generate AI threat assessment and attack narratives using Claude Sonnet
+ */
+router.post('/:id/ai-analyze', async (req, res, next) => {
+  const reportId = req.params.id;
+  const reportsDir = path.join(__dirname, '../../reports');
+  const jsonPath = path.join(reportsDir, `${reportId}.json`);
+
+  if (!fs.existsSync(jsonPath)) {
+    return res.status(404).json({ success: false, message: 'Report not found' });
+  }
+
+  try {
+    const rawContent = fs.readFileSync(jsonPath, 'utf8');
+    const reportData = JSON.parse(rawContent);
+
+    // Generate AI assessment (calls Claude API or triggers mock demo fallback)
+    const aiAnalysis = await generateAiAnalysis(reportData);
+    
+    // Save to report
+    reportData.aiAnalysis = aiAnalysis;
+    fs.writeFileSync(jsonPath, JSON.stringify(reportData, null, 2), 'utf8');
+
+    // Rebuild Markdown report to include AI insights
+    const mdPath = path.join(reportsDir, `${reportId}.md`);
+    const markdownContent = buildMarkdownReport(reportData);
+    fs.writeFileSync(mdPath, markdownContent, 'utf8');
+
+    res.json({
+      success: true,
+      message: 'AI threat analysis completed successfully',
+      aiAnalysis
+    });
+  } catch (err) {
+    next(err);
   }
 });
 

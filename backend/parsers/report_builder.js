@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const docx = require('docx');
 const { walkDir } = require('../utils/fileWalker');
 const { checkSemgrepInstalled, runSemgrepScan } = require('../scanners/semgrep_scanner');
 const { parseSemgrepResults } = require('./semgrep_parser');
@@ -34,6 +35,20 @@ function buildMarkdownReport(report) {
   md += `| **Total** | **${report.findings.length}** |\n\n`;
 
   md += `### Primary OWASP Theme: ${m.topIssueCategory}\n\n`;
+
+  if (report.aiAnalysis) {
+    const ai = report.aiAnalysis;
+    md += `## 🔍 AI Detective Audit Insights\n\n`;
+    md += `### Executive Posture Summary\n${ai.executiveSummary}\n\n`;
+    md += `### Threat Vector & Attack Chain Scenario\n${ai.attackNarrative}\n\n`;
+    md += `### AI Remediation Priority Checklist\n`;
+    if (Array.isArray(ai.remediationRanking)) {
+      ai.remediationRanking.forEach(item => {
+        md += `* **Rank #${item.rank}**: ${item.title} (\`${item.location}\`)\n  *Reasoning:* ${item.reasoning}\n`;
+      });
+    }
+    md += `\n---\n\n`;
+  }
 
   md += `## Detailed Findings\n\n`;
 
@@ -686,240 +701,484 @@ async function buildReport(scanDirectory, projectName) {
 }
 
 /**
- * Builds a complete Word DOC report using HTML representation.
+ * Builds a complete Word DOCX report using the docx library.
+ * Returns a Promise resolving to a binary buffer.
  */
-function buildDocReport(report) {
+async function buildDocReport(report) {
   const m = report.metrics;
   const sev = m.severityCounts;
 
-  const listItems = report.findings.map((finding, idx) => {
-    return `
-      <div class="finding-card ${finding.severity.toLowerCase()}">
-        <h3>${idx + 1}. [${finding.severity}] ${escapeHtml(finding.title)}</h3>
-        <p><strong>Rule ID:</strong> <code>${escapeHtml(finding.rule_id)}</code> | <strong>File:</strong> <code>${escapeHtml(finding.path)}</code> (Line ${finding.line})</p>
-        <p><strong>CWE:</strong> ${escapeHtml(finding.cwe)} | <strong>OWASP:</strong> ${escapeHtml(finding.owasp)}</p>
-        
-        <div class="section-title">Vulnerability Description</div>
-        <p class="section-content">${escapeHtml(finding.message).replace(/\n/g, '<br>')}</p>
-        
-        ${finding.codeSnippet ? `
-          <div class="section-title">Vulnerable Snippet</div>
-          <div class="codeblock"><pre style="margin:0;"><code>${escapeHtml(finding.codeSnippet)}</code></pre></div>
-        ` : ''}
-        
-        <div class="section-title">Remediation Steps</div>
-        <p class="section-content">${escapeHtml(finding.remediation)}</p>
-        
-        ${finding.suggestedDiff ? `
-          <div class="section-title">Suggested Security Fix</div>
-          ${formatDiffHtml(finding.suggestedDiff)}
-        ` : ''}
-      </div>
-      <br>
-    `;
-  }).join('');
+  const COLOR_ACCENT = "06B6D4"; // Cyan
+  const COLOR_TEXT_MAIN = "1E293B"; // Dark Slate
+  const COLOR_TEXT_MUTED = "64748B"; // Muted Slate
+  const COLOR_CRITICAL = "EF4444"; // Red
+  const COLOR_HIGH = "F97316"; // Orange
+  const COLOR_MEDIUM = "EAB308"; // Yellow
+  const COLOR_LOW = "3B82F6"; // Blue
+  const COLOR_BG_LIGHT = "F8FAFC"; // Very Light Slate
+  const COLOR_BORDER = "E2E8F0"; // Border Slate
 
-  return `
-    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-    <head>
-      <meta charset="utf-8">
-      <title>AI-Detective Security Assessment - ${report.projectName}</title>
-      <!--[if gte mso 9]>
-      <xml>
-        <o:OfficeDocumentSettings>
-          <o:AllowPNG/>
-          <o:PixelsPerInch>96</o:PixelsPerInch>
-        </o:OfficeDocumentSettings>
-        <w:WordDocument>
-          <w:View>Print</w:View>
-          <w:Zoom>100</w:Zoom>
-          <w:DoNotOptimizeForBrowser/>
-        </w:WordDocument>
-      </xml>
-      <![endif]-->
-      <style>
-        body {
-          font-family: Arial, sans-serif;
-          font-size: 11pt;
-          line-height: 1.4;
-          color: #1e293b;
-          margin: 40px;
-        }
-        h1 {
-          font-family: Arial, sans-serif;
-          font-size: 24pt;
-          font-weight: bold;
-          color: #0f172a;
-          border-bottom: 2px solid #cbd5e1;
-          padding-bottom: 5px;
-          margin-bottom: 20px;
-        }
-        h2 {
-          font-family: Arial, sans-serif;
-          font-size: 16pt;
-          font-weight: bold;
-          color: #0f172a;
-          margin-top: 30px;
-          border-bottom: 1px solid #e2e8f0;
-          padding-bottom: 5px;
-        }
-        h3 {
-          font-family: Arial, sans-serif;
-          font-size: 12pt;
-          font-weight: bold;
-          color: #1e293b;
-          margin: 0 0 8px 0;
-        }
-        p {
-          margin: 6px 0;
-        }
-        code {
-          font-family: Consolas, "Courier New", monospace;
-          background-color: #f1f5f9;
-          padding: 2px 4px;
-          font-size: 9.5pt;
-          border-radius: 3px;
-        }
-        .header-meta {
-          margin-bottom: 30px;
-        }
-        .meta-table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-bottom: 20px;
-        }
-        .meta-table td {
-          border: 1px solid #cbd5e1;
-          padding: 10px;
-          font-size: 10pt;
-        }
-        .meta-table td.label {
-          background-color: #f1f5f9;
-          font-weight: bold;
-          width: 20%;
-        }
-        .finding-card {
-          border-left: 6px solid #cbd5e1;
-          padding: 15px;
-          margin-bottom: 25px;
-          background-color: #f8fafc;
-          border-top: 1px solid #e2e8f0;
-          border-right: 1px solid #e2e8f0;
-          border-bottom: 1px solid #e2e8f0;
-        }
-        .finding-card.critical { border-left-color: #ef4444; background-color: #fef2f2; }
-        .finding-card.high { border-left-color: #f97316; background-color: #fff7ed; }
-        .finding-card.medium { border-left-color: #eab308; background-color: #fefdf0; }
-        .finding-card.low { border-left-color: #3b82f6; background-color: #eff6ff; }
-        
-        .section-title {
-          font-size: 9pt;
-          font-weight: bold;
-          text-transform: uppercase;
-          color: #475569;
-          margin-top: 15px;
-          margin-bottom: 4px;
-          letter-spacing: 0.5px;
-        }
-        .section-content {
-          font-size: 10.5pt;
-          color: #334155;
-          margin-bottom: 10px;
-        }
-        .codeblock {
-          background-color: #f1f5f9;
-          color: #0f172a;
-          border: 1px solid #cbd5e1;
-          font-family: Consolas, "Courier New", monospace;
-          padding: 12px;
-          font-size: 9.5pt;
-          margin: 6px 0;
-        }
-        .diff-box {
-          border: 1px solid #cbd5e1;
-          font-family: Consolas, "Courier New", monospace;
-          font-size: 9pt;
-          margin: 8px 0;
-          background-color: #ffffff;
-        }
-        .diff-header {
-          background-color: #f1f5f9;
-          padding: 6px 12px;
-          font-weight: bold;
-          border-bottom: 1px solid #cbd5e1;
-        }
-        .diff-line {
-          padding: 4px 12px;
-        }
-        .deletion {
-          background-color: #fee2e2;
-          color: #991b1b;
-        }
-        .addition {
-          background-color: #dcfce7;
-          color: #166534;
-        }
-        .info {
-          background-color: #f8fafc;
-          color: #475569;
-          text-align: center;
-        }
-      </style>
-    </head>
-    <body>
-      <h1>AI-Detective Security Assessment Report</h1>
-      <div class="header-meta">
-        <table class="meta-table">
-          <tr>
-            <td class="label">Project:</td>
-            <td><strong>${escapeHtml(report.projectName)}</strong></td>
-            <td class="label">Date:</td>
-            <td>${new Date(report.scanTime).toUTCString()}</td>
-          </tr>
-          <tr>
-            <td class="label">Security Grade:</td>
-            <td><strong>${m.grade} (${m.rating})</strong></td>
-            <td class="label">Security Score:</td>
-            <td><strong>${m.securityScore} / 100</strong></td>
-          </tr>
-          <tr>
-            <td class="label">Files Scanned:</td>
-            <td>${report.filesScannedCount}</td>
-            <td class="label">Semgrep Status:</td>
-            <td>${escapeHtml(report.semgrepStatus)}</td>
-          </tr>
-        </table>
-      </div>
+  // Helpers for text structures
+  function createHeading2(text) {
+    return new docx.Paragraph({
+      heading: docx.HeadingLevel.HEADING_2,
+      spacing: { before: 240, after: 120 },
+      children: [
+        new docx.TextRun({
+          text: text,
+          font: "Arial",
+          bold: true,
+          size: 28, // 14pt
+          color: "0F172A",
+        })
+      ]
+    });
+  }
 
-      <h2>Severity Breakdown</h2>
-      <table class="meta-table" style="width: 50%;">
-        <tr style="background-color: #f1f5f9; font-weight: bold;">
-          <td>Severity</td>
-          <td>Count</td>
-        </tr>
-        <tr>
-          <td style="color: #ef4444; font-weight: bold;">🔴 Critical</td>
-          <td><strong>${sev.Critical}</strong></td>
-        </tr>
-        <tr>
-          <td style="color: #f97316; font-weight: bold;">🟠 High</td>
-          <td><strong>${sev.High}</strong></td>
-        </tr>
-        <tr>
-          <td style="color: #eab308; font-weight: bold;">🟡 Medium</td>
-          <td><strong>${sev.Medium}</strong></td>
-        </tr>
-        <tr>
-          <td style="color: #3b82f6; font-weight: bold;">🔵 Low</td>
-          <td><strong>${sev.Low}</strong></td>
-        </tr>
-      </table>
+  function createHeading3(text) {
+    return new docx.Paragraph({
+      heading: docx.HeadingLevel.HEADING_3,
+      spacing: { before: 180, after: 80 },
+      children: [
+        new docx.TextRun({
+          text: text,
+          font: "Arial",
+          bold: true,
+          size: 22, // 11pt
+          color: "1E293B",
+        })
+      ]
+    });
+  }
 
-      <h2>Detailed Vulnerability Catalog</h2>
-      ${listItems.length > 0 ? listItems : '<p>No vulnerabilities found.</p>'}
-    </body>
-    </html>
-  `;
+  function createMetaTable(rowsData) {
+    return new docx.Table({
+      width: { size: 100, type: docx.WidthType.PERCENTAGE },
+      rows: rowsData.map(row => new docx.TableRow({
+        children: row.map(cell => new docx.TableCell({
+          children: [
+            new docx.Paragraph({
+              children: [
+                new docx.TextRun({
+                  text: cell.text || "",
+                  bold: cell.bold || false,
+                  color: cell.color || COLOR_TEXT_MAIN,
+                  font: cell.font || "Arial",
+                  size: cell.size || 20, // 10pt
+                })
+              ],
+              spacing: { before: 80, after: 80 }
+            })
+          ],
+          shading: cell.fill ? { fill: cell.fill } : undefined,
+          borders: {
+            top: { style: docx.BorderStyle.SINGLE, size: 4, color: COLOR_BORDER },
+            bottom: { style: docx.BorderStyle.SINGLE, size: 4, color: COLOR_BORDER },
+            left: { style: docx.BorderStyle.SINGLE, size: 4, color: COLOR_BORDER },
+            right: { style: docx.BorderStyle.SINGLE, size: 4, color: COLOR_BORDER }
+          },
+          padding: { top: 100, bottom: 100, left: 150, right: 150 }
+        }))
+      }))
+    });
+  }
+
+  function createCodeBlock(codeText) {
+    if (!codeText) return null;
+    const lines = codeText.split('\n');
+    return new docx.Table({
+      width: { size: 100, type: docx.WidthType.PERCENTAGE },
+      rows: [
+        new docx.TableRow({
+          children: [
+            new docx.TableCell({
+              children: lines.map(line => new docx.Paragraph({
+                children: [
+                  new docx.TextRun({
+                    text: line,
+                    font: "Consolas",
+                    size: 18, // 9pt
+                    color: "0F172A",
+                  })
+                ],
+                spacing: { before: 40, after: 40 }
+              })),
+              shading: { fill: "F8FAFC" },
+              borders: {
+                top: { style: docx.BorderStyle.SINGLE, size: 4, color: "CBD5E1" },
+                bottom: { style: docx.BorderStyle.SINGLE, size: 4, color: "CBD5E1" },
+                left: { style: docx.BorderStyle.SINGLE, size: 4, color: "CBD5E1" },
+                right: { style: docx.BorderStyle.SINGLE, size: 4, color: "CBD5E1" }
+              },
+              padding: { top: 120, bottom: 120, left: 150, right: 150 }
+            })
+          ]
+        })
+      ]
+    });
+  }
+
+  function createDiffBlock(diffText) {
+    if (!diffText) return null;
+
+    const currentMarker = '<<<< CURRENT CODE';
+    const fixMarker = '==== SUGGESTED FIX';
+    const endMarker = '>>>>';
+
+    let currentBlock = '';
+    let fixBlock = '';
+    let lines = [];
+
+    if (diffText.includes(currentMarker) && diffText.includes(fixMarker)) {
+      const parts = diffText.split(fixMarker);
+      currentBlock = parts[0].replace(currentMarker, '').trim();
+      fixBlock = parts[1].replace(endMarker, '').trim();
+
+      lines.push({ text: "Vulnerable Original", isHeader: true });
+      currentBlock.split('\n').forEach(l => lines.push({ text: `- ${l}`, isDeletion: true }));
+      lines.push({ text: "Secure Mitigated", isHeader: true });
+      fixBlock.split('\n').forEach(l => lines.push({ text: `+ ${l}`, isAddition: true }));
+    } else {
+      return createCodeBlock(diffText);
+    }
+
+    return new docx.Table({
+      width: { size: 100, type: docx.WidthType.PERCENTAGE },
+      rows: [
+        new docx.TableRow({
+          children: [
+            new docx.TableCell({
+              children: lines.map(line => {
+                let color = "0F172A";
+                let shading = undefined;
+                let bold = false;
+
+                if (line.isHeader) {
+                  color = "475569";
+                  bold = true;
+                  shading = "F1F5F9";
+                } else if (line.isDeletion) {
+                  color = "991B1B";
+                  shading = "FEE2E2";
+                } else if (line.isAddition) {
+                  color = "166534";
+                  shading = "DCFCE7";
+                }
+
+                return new docx.Paragraph({
+                  children: [
+                    new docx.TextRun({
+                      text: line.text,
+                      font: "Consolas",
+                      size: 18, // 9pt
+                      color: color,
+                      bold: bold
+                    })
+                  ],
+                  spacing: { before: 60, after: 60 },
+                  shading: shading ? { fill: shading } : undefined
+                });
+              }),
+              shading: { fill: "FFFFFF" },
+              borders: {
+                top: { style: docx.BorderStyle.SINGLE, size: 4, color: "CBD5E1" },
+                bottom: { style: docx.BorderStyle.SINGLE, size: 4, color: "CBD5E1" },
+                left: { style: docx.BorderStyle.SINGLE, size: 4, color: "CBD5E1" },
+                right: { style: docx.BorderStyle.SINGLE, size: 4, color: "CBD5E1" }
+              },
+              padding: { top: 120, bottom: 120, left: 150, right: 150 }
+            })
+          ]
+        })
+      ]
+    });
+  }
+
+  const children = [];
+
+  // Title Header
+  children.push(new docx.Paragraph({
+    spacing: { before: 200, after: 100 },
+    children: [
+      new docx.TextRun({
+        text: "AI-Detective Security Assessment Report",
+        font: "Arial",
+        bold: true,
+        size: 44, // 22pt
+        color: "0F172A",
+      })
+    ]
+  }));
+
+  children.push(new docx.Paragraph({
+    spacing: { before: 0, after: 360 },
+    children: [
+      new docx.TextRun({
+        text: "Secure code analysis, hybrid vulnerability scanning, and AI-powered mitigation guidelines.",
+        font: "Arial",
+        size: 20, // 10pt
+        color: COLOR_TEXT_MUTED,
+        italic: true
+      })
+    ]
+  }));
+
+  // Executive Summary
+  children.push(createHeading2("Executive Summary"));
+
+  let gradeColor = COLOR_LOW;
+  if (m.grade === "F") gradeColor = COLOR_CRITICAL;
+  else if (m.grade === "D" || m.grade === "C") gradeColor = COLOR_HIGH;
+  else if (m.grade === "B") gradeColor = COLOR_MEDIUM;
+
+  const summaryRows = [
+    [
+      { text: "Project Name:", bold: true, fill: "F1F5F9" },
+      { text: report.projectName },
+      { text: "Scan Date:", bold: true, fill: "F1F5F9" },
+      { text: new Date(report.scanTime).toUTCString() }
+    ],
+    [
+      { text: "Security Grade:", bold: true, fill: "F1F5F9" },
+      { text: `${m.grade} (${m.rating})`, bold: true, color: gradeColor },
+      { text: "Security Score:", bold: true, fill: "F1F5F9" },
+      { text: `${m.securityScore} / 100`, bold: true }
+    ],
+    [
+      { text: "Files Scanned:", bold: true, fill: "F1F5F9" },
+      { text: String(report.filesScannedCount) },
+      { text: "Semgrep Status:", bold: true, fill: "F1F5F9" },
+      { text: report.semgrepStatus }
+    ]
+  ];
+  children.push(createMetaTable(summaryRows));
+
+  children.push(new docx.Paragraph({ spacing: { before: 120, after: 120 } }));
+
+  // Threat Severity Counts
+  children.push(createHeading3("Vulnerability Severity Breakdown"));
+  const threatRows = [
+    [
+      { text: "Severity", bold: true, fill: "F1F5F9" },
+      { text: "Count", bold: true, fill: "F1F5F9" }
+    ],
+    [
+      { text: "Critical Risk (🔴)", bold: true, color: COLOR_CRITICAL },
+      { text: String(sev.Critical), bold: true }
+    ],
+    [
+      { text: "High Risk (🟠)", bold: true, color: COLOR_HIGH },
+      { text: String(sev.High), bold: true }
+    ],
+    [
+      { text: "Medium Risk (🟡)", bold: true, color: COLOR_MEDIUM },
+      { text: String(sev.Medium), bold: true }
+    ],
+    [
+      { text: "Low Risk (🔵)", bold: true, color: COLOR_LOW },
+      { text: String(sev.Low), bold: true }
+    ]
+  ];
+  children.push(new docx.Table({
+    width: { size: 50, type: docx.WidthType.PERCENTAGE },
+    rows: threatRows.map(row => new docx.TableRow({
+      children: row.map(cell => new docx.TableCell({
+        children: [
+          new docx.Paragraph({
+            children: [
+              new docx.TextRun({
+                text: cell.text,
+                bold: cell.bold || false,
+                color: cell.color || COLOR_TEXT_MAIN,
+                size: 20
+              })
+            ],
+            spacing: { before: 60, after: 60 }
+          })
+        ],
+        shading: cell.fill ? { fill: cell.fill } : undefined,
+        borders: {
+          top: { style: docx.BorderStyle.SINGLE, size: 4, color: COLOR_BORDER },
+          bottom: { style: docx.BorderStyle.SINGLE, size: 4, color: COLOR_BORDER },
+          left: { style: docx.BorderStyle.SINGLE, size: 4, color: COLOR_BORDER },
+          right: { style: docx.BorderStyle.SINGLE, size: 4, color: COLOR_BORDER }
+        },
+        padding: { top: 80, bottom: 80, left: 120, right: 120 }
+      }))
+    }))
+  }));
+
+  children.push(new docx.Paragraph({ spacing: { before: 200, after: 200 } }));
+
+  // AI Detective Insights
+  if (report.aiAnalysis) {
+    const ai = report.aiAnalysis;
+    children.push(createHeading2("🔍 AI Detective Threat Assessment"));
+
+    children.push(createHeading3("Executive Posture Summary"));
+    ai.executiveSummary.split('\n\n').forEach(para => {
+      if (para.trim()) {
+        children.push(new docx.Paragraph({
+          children: [new docx.TextRun({ text: para.replace(/###/g, '').replace(/\*\*/g, '').trim() })],
+          spacing: { before: 80, after: 80 }
+        }));
+      }
+    });
+
+    children.push(createHeading3("Chained Threat Vectors (Attack Chain)"));
+    ai.attackNarrative.split('\n\n').forEach(para => {
+      if (para.trim()) {
+        const isStep = para.startsWith('**Step');
+        const isImpact = para.startsWith('**Impact') || para.startsWith('Impact');
+
+        let text = para.replace(/\*\*/g, '').trim();
+        let color = COLOR_TEXT_MAIN;
+        let bold = false;
+
+        if (isStep) {
+          color = COLOR_ACCENT;
+          bold = true;
+        } else if (isImpact) {
+          color = COLOR_CRITICAL;
+          bold = true;
+        }
+
+        children.push(new docx.Paragraph({
+          children: [new docx.TextRun({ text: text, color: color, bold: bold })],
+          spacing: { before: 80, after: 80 }
+        }));
+      }
+    });
+
+    children.push(createHeading3("AI Prioritized Remediation Checklist"));
+    if (Array.isArray(ai.remediationRanking)) {
+      ai.remediationRanking.forEach(item => {
+        children.push(new docx.Paragraph({
+          bullet: { level: 0 },
+          children: [
+            new docx.TextRun({ text: `Rank #${item.rank}: `, bold: true, color: item.rank <= 2 ? COLOR_CRITICAL : COLOR_TEXT_MAIN }),
+            new docx.TextRun({ text: `${item.title} (`, bold: true }),
+            new docx.TextRun({ text: item.location, font: "Consolas" }),
+            new docx.TextRun({ text: `)\n` }),
+            new docx.TextRun({ text: `Reasoning: `, italic: true, color: COLOR_TEXT_MUTED }),
+            new docx.TextRun({ text: item.reasoning, italic: true })
+          ],
+          spacing: { before: 60, after: 60 }
+        }));
+      });
+    }
+
+    children.push(new docx.Paragraph({ spacing: { before: 200, after: 200 } }));
+  }
+
+  // Detailed Findings
+  children.push(createHeading2("Detailed Findings Catalog"));
+
+  if (report.findings.length === 0) {
+    children.push(new docx.Paragraph({
+      children: [new docx.TextRun({ text: "No vulnerabilities were detected in this codebase. Good job!", italic: true })],
+      spacing: { before: 100, after: 100 }
+    }));
+  } else {
+    report.findings.forEach((finding, idx) => {
+      let sevColor = COLOR_LOW;
+      if (finding.severity === "Critical") sevColor = COLOR_CRITICAL;
+      else if (finding.severity === "High") sevColor = COLOR_HIGH;
+      else if (finding.severity === "Medium") sevColor = COLOR_MEDIUM;
+
+      children.push(new docx.Paragraph({
+        heading: docx.HeadingLevel.HEADING_3,
+        spacing: { before: 200, after: 80 },
+        children: [
+          new docx.TextRun({
+            text: `${idx + 1}. [${finding.severity.toUpperCase()}] ${finding.title}`,
+            bold: true,
+            color: sevColor,
+            size: 24
+          })
+        ]
+      }));
+
+      const findingMetaRows = [
+        [
+          { text: "Rule ID:", bold: true, fill: "F1F5F9" },
+          { text: finding.rule_id },
+          { text: "File / Line:", bold: true, fill: "F1F5F9" },
+          { text: `${finding.path}:L${finding.line}` }
+        ],
+        [
+          { text: "CWE Mappings:", bold: true, fill: "F1F5F9" },
+          { text: finding.cwe },
+          { text: "OWASP Category:", bold: true, fill: "F1F5F9" },
+          { text: finding.owasp }
+        ]
+      ];
+      children.push(createMetaTable(findingMetaRows));
+
+      children.push(new docx.Paragraph({
+        children: [new docx.TextRun({ text: "Vulnerability Description", bold: true, color: "475569" })],
+        spacing: { before: 100, after: 40 }
+      }));
+      children.push(new docx.Paragraph({
+        children: [new docx.TextRun({ text: finding.message })],
+        spacing: { before: 40, after: 100 }
+      }));
+
+      if (finding.codeSnippet) {
+        children.push(new docx.Paragraph({
+          children: [new docx.TextRun({ text: "Vulnerable Code Snippet", bold: true, color: "475569" })],
+          spacing: { before: 100, after: 40 }
+        }));
+        const codeBlock = createCodeBlock(finding.codeSnippet);
+        if (codeBlock) children.push(codeBlock);
+      }
+
+      children.push(new docx.Paragraph({
+        children: [new docx.TextRun({ text: "Remediation Steps", bold: true, color: "475569" })],
+        spacing: { before: 100, after: 40 }
+      }));
+      children.push(new docx.Paragraph({
+        children: [new docx.TextRun({ text: finding.remediation })],
+        spacing: { before: 40, after: 100 }
+      }));
+
+      if (finding.suggestedDiff) {
+        children.push(new docx.Paragraph({
+          children: [new docx.TextRun({ text: "Suggested Mitigation Fix Comparison", bold: true, color: "475569" })],
+          spacing: { before: 100, after: 40 }
+        }));
+        const diffBlock = createDiffBlock(finding.suggestedDiff);
+        if (diffBlock) children.push(diffBlock);
+      }
+
+      children.push(new docx.Paragraph({
+        spacing: { before: 150, after: 150 },
+        border: {
+          bottom: { style: docx.BorderStyle.SINGLE, size: 6, color: "CBD5E1" }
+        }
+      }));
+    });
+  }
+
+  const doc = new docx.Document({
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: "Arial",
+            size: 21, // ~10.5pt
+            color: COLOR_TEXT_MAIN
+          }
+        }
+      }
+    },
+    sections: [{
+      properties: {},
+      children: children
+    }]
+  });
+
+  return await docx.Packer.toBuffer(doc);
 }
 
 module.exports = {
