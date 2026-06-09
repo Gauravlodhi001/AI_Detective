@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI-Detective | Professional Security Scanner Dashboard</title>
+  <meta name="description" content="AI-Detective combines Semgrep static analysis with custom secret detection, composition analysis, and executive threat reporting.">
+  
+  <!-- Modern Typography from Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Chart.js for beautiful graphs -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <!-- Premium Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- App Wrapper -->
+  <div class="app-container">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-logo">
+          <i class="fa-solid fa-user-secret"></i>
+        </div>
+        <span class="brand-name">AI-DETECTIVE</span>
+      </div>
+      
+      <nav class="sidebar-nav">
+        <button id="nav-btn-dashboard" class="nav-item active" onclick="switchTab('dashboard')">
+          <i class="fa-solid fa-chart-line"></i>
+          <span>Dashboard</span>
+        </button>
+        <button id="nav-btn-scan" class="nav-item" onclick="switchTab('scan')">
+          <i class="fa-solid fa-shield-halved"></i>
+          <span>Scan Code</span>
+        </button>
+        <button id="nav-btn-reports" class="nav-item" onclick="switchTab('reports')">
+          <i class="fa-solid fa-file-invoice-solid"></i>
+          <span>Saved Reports</span>
+        </button>
+        <button id="nav-btn-settings" class="nav-item" onclick="switchTab('settings')">
+          <i class="fa-solid fa-sliders"></i>
+          <span>Settings</span>
+        </button>
+      </nav>
+      
+      <div class="sidebar-footer">
+        <div class="status-badge" id="semgrep-status-badge">
+          <span class="status-dot pulsing"></span>
+          <span id="semgrep-status-text">Detecting Semgrep...</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- Top App Bar -->
+      <header class="app-header">
+        <h1 id="page-title">Security Dashboard</h1>
+        <div class="header-actions">
+          <div class="user-profile">
+            <span class="profile-name">Developer Session</span>
+            <div class="profile-avatar">
+              <i class="fa-solid fa-code"></i>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- TAB: DASHBOARD -->
+      <section id="tab-dashboard" class="tab-pane active">
+        <!-- Top Metrics Cards -->
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-icon blue"><i class="fa-solid fa-list-check"></i></div>
+            <div class="metric-details">
+              <span class="metric-label">Total Audits</span>
+              <h2 id="stat-total-scans" class="metric-value">0</h2>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon green"><i class="fa-solid fa-shield-cat"></i></div>
+            <div class="metric-details">
+              <span class="metric-label">Secure Projects</span>
+              <h2 id="stat-secure-projects" class="metric-value">0</h2>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon red"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <div class="metric-details">
+              <span class="metric-label">Vulnerability Hotspots</span>
+              <h2 id="stat-hotspot-projects" class="metric-value">0</h2>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon yellow"><i class="fa-solid fa-fire-flame-curved"></i></div>
+            <div class="metric-details">
+              <span class="metric-label">Top Threat Category</span>
+              <h2 id="stat-top-threat" class="metric-value">None</h2>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Activity Section -->
+        <div class="content-card">
+          <div class="card-header">
+            <h2>Recent Security Audits</h2>
+            <button class="btn btn-primary btn-sm" onclick="switchTab('scan')">
+              <i class="fa-solid fa-plus"></i> New Scan
+            </button>
+          </div>
+          
+          <div class="table-responsive">
+            <table class="data-table" id="recent-scans-table">
+              <thead>
+                <tr>
+                  <th>Project Name</th>
+                  <th>Grade</th>
+                  <th>Score</th>
+                  <th>Issues (C/H/M/L)</th>
+                  <th>Files Scanned</th>
+                  <th>Date & Time</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="scan-list-tbody">
+                <!-- JavaScript populates this -->
+                <tr class="empty-state-row">
+                  <td colspan="7">
+                    <div class="empty-state">
+                      <i class="fa-solid fa-folder-open"></i>
+                      <p>No scans performed yet. Head over to the scan tab to audit your code.</p>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: SCAN CODE (Scan Hub) -->
+      <section id="tab-scan" class="tab-pane">
+        <div class="scan-hub-grid">
+          
+          <!-- Scan Control Cards -->
+          <div class="scan-controls-container">
+            <div class="card-tabs">
+              <button class="card-tab-btn active" id="tab-btn-zip" onclick="switchScanMode('zip')">
+                <i class="fa-solid fa-file-zipper"></i> ZIP File
+              </button>
+              <button class="card-tab-btn" id="tab-btn-git" onclick="switchScanMode('git')">
+                <i class="fa-solid fa-git-alt"></i> Git Repo
+              </button>
+              <button class="card-tab-btn" id="tab-btn-paste" onclick="switchScanMode('paste')">
+                <i class="fa-solid fa-paste"></i> Paste Code
+              </button>
+            </div>
+
+            <!-- ZIP SCAN PANEL -->
+            <div class="scan-panel active" id="panel-zip">
+              <form id="zip-scan-form" onsubmit="handleZipScan(event)">
+                <div class="drag-drop-area" id="drag-drop-zone">
+                  <i class="fa-solid fa-cloud-arrow-up drag-icon"></i>
+                  <p class="drag-main-text">Drag and drop your project ZIP file here</p>
+                  <p class="drag-sub-text">Max file size: 50MB</p>
+                  <div class="file-select-btn-wrapper">
+                    <span>or browse files</span>
+                    <input type="file" id="zip-file-input" name="zipFile" accept=".zip" required onchange="handleFileSelect(event)">
+                  </div>
+                  <div class="selected-file-badge" id="selected-file-display" style="display: none;">
+                    <i class="fa-solid fa-file-zipper"></i>
+                    <span id="selected-file-name">filename.zip</span>
+                    <button type="button" class="remove-file-btn" onclick="clearSelectedFile()"><i class="fa-solid fa-xmark"></i></button>
+                  </div>
+                </div>
+                <div class="form-group mt-20">
+                  <label for="zip-project-name">Project Name (Optional)</label>
+                  <input type="text" id="zip-project-name" name="projectName" placeholder="e.g. My Express Project">
+                </div>
+                <button type="submit" class="btn btn-primary btn-block btn-lg mt-20" id="zip-submit-btn">
+                  <i class="fa-solid fa-circle-play"></i> Run Security Scan
+                </button>
+              </form>
+            </div>
+
+            <!-- GIT SCAN PANEL -->
+            <div class="scan-panel" id="panel-git">
+              <form id="git-scan-form" onsubmit="handleGitScan(event)">
+                <p class="panel-helper-text">Scan public Git repositories directly by pasting their HTTP clone URL.</p>
+                <div class="form-group">
+                  <label for="git-url">Git Repo URL</label>
+                  <input type="url" id="git-url" name="gitUrl" placeholder="https://github.com/expressjs/express.git" required>
+                </div>
+                <div class="form-group">
+                  <label for="git-branch">Branch (Optional)</label>
+                  <input type="text" id="git-branch" name="branch" placeholder="main or master (defaults to primary branch)">
+                </div>
+                <button type="submit" class="btn btn-primary btn-block btn-lg mt-20" id="git-submit-btn">
+                  <i class="fa-solid fa-code-branch"></i> Clone & Scan Repository
+                </button>
+              </form>
+            </div>
+
+            <!-- PASTE SCAN PANEL -->
+            <div class="scan-panel" id="panel-paste">
+              <form id="paste-scan-form" onsubmit="handlePasteScan(event)">
+                <p class="panel-helper-text">Quick-scan single files or code snippets by pasting the content below.</p>
+                <div class="form-group">
+                  <label for="paste-filename">Filename & Extension</label>
+                  <input type="text" id="paste-filename" name="filename" placeholder="app.js, main.py, config.json" required>
+                </div>
+                <div class="form-group">
+                  <label for="paste-code">Source Code</label>
+                  <textarea id="paste-code" name="code" rows="10" placeholder="paste code block here..." required></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="paste-project-name">Project / Context Name (Optional)</label>
+                  <input type="text" id="paste-project-name" name="projectName" placeholder="e.g. Authentication Module">
+                </div>
+                <button type="submit" class="btn btn-primary btn-block btn-lg mt-20" id="paste-submit-btn">
+                  <i class="fa-solid fa-laptop-code"></i> Analyze Code Snippet
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Console log output simulator -->
+          <div class="console-card">
+            <div class="console-header">
+              <div class="console-dots">
+                <span class="dot red"></span>
+                <span class="dot yellow"></span>
+                <span class="dot green"></span>
+              </div>
+              <span class="console-title">Live Analysis Feed</span>
+            </div>
+            <div class="console-body" id="scan-console-logs">
+              <div class="console-line">[READY] System idle. Select a scanning channel above to begin assessment.</div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- TAB: REPORT VIEWER (Populated dynamically) -->
+      <section id="tab-report-viewer" class="tab-pane">
+        
+        <!-- Report Header / Action Toolbar -->
+        <div class="report-toolbar content-card">
+          <div class="report-title-section">
+            <span class="badge" id="report-badge-status">Semgrep + SAST</span>
+            <h2 id="report-title-h2">Project Security Audit</h2>
+            <p id="report-date-text">Scanned on: Jun 09, 2026</p>
+          </div>
+          <div class="report-action-buttons">
+            <button class="btn btn-secondary btn-sm" onclick="exportReport('markdown')">
+              <i class="fa-brands fa-markdown"></i> Markdown
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="exportReport('html')">
+              <i class="fa-solid fa-code"></i> HTML
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="exportReport('json')">
+              <i class="fa-solid fa-brackets-curly"></i> JSON
+            </button>
+            <button class="btn btn-primary btn-sm" onclick="exportReport('doc')">
+              <i class="fa-solid fa-file-word"></i> Export Word (DOC)
+            </button>
+          </div>
+        </div>
+
+        <!-- Grade and Risk Summary Row -->
+        <div class="report-overview-grid">
+          
+          <!-- Grade Dial Card -->
+          <div class="grade-card content-card">
+            <div class="grade-ring-wrapper">
+              <div class="grade-ring" id="report-grade-ring">
+                <span id="report-grade-letter">A</span>
+              </div>
+            </div>
+            <div class="grade-details">
+              <h3>Security Grade</h3>
+              <p id="report-grade-rating">Secure Environment</p>
+              <div class="score-line">
+                <span>Security Posture Index:</span>
+                <strong id="report-score-index">100/100</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- Severity Summary Counts -->
+          <div class="severity-card content-card">
+            <h3>Threat Count Breakdown</h3>
+            <div class="severity-counts-bar">
+              <div class="sev-item critical">
+                <span class="count-num" id="report-count-critical">0</span>
+                <span class="count-lbl">Critical</span>
+              </div>
+              <div class="sev-item high">
+                <span class="count-num" id="report-count-high">0</span>
+                <span class="count-lbl">High</span>
+              </div>
+              <div class="sev-item medium">
+                <span class="count-num" id="report-count-medium">0</span>
+                <span class="count-lbl">Medium</span>
+              </div>
+              <div class="sev-item low">
+                <span class="count-num" id="report-count-low">0</span>
+                <span class="count-lbl">Low</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Stats -->
+          <div class="quick-stats-card content-card">
+            <h3>Audit Statistics</h3>
+            <ul class="stats-list">
+              <li>
+                <span>Files Audited:</span>
+                <strong id="report-stat-files">0</strong>
+              </li>
+              <li>
+                <span>Total Findings:</span>
+                <strong id="report-stat-findings">0</strong>
+              </li>
+              <li>
+                <span>Engine Used:</span>
+                <strong id="report-stat-engine">Semgrep</strong>
+              </li>
+              <li>
+                <span>Common Vulnerability:</span>
+                <strong id="report-stat-common">None</strong>
+              </li>
+            </ul>
+          </div>
+
+        </div>
+
+        <!-- Chart Analytics Card Row -->
+        <div class="charts-row-grid">
+          <div class="chart-container-card content-card">
+            <h3>Vulnerabilities by Severity</h3>
+            <div class="chart-canvas-wrapper">
+              <canvas id="chart-severity"></canvas>
+            </div>
+          </div>
+          <div class="chart-container-card content-card">
+            <h3>Vulnerabilities by OWASP Category</h3>
+            <div class="chart-canvas-wrapper">
+              <canvas id="chart-owasp"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Findings List -->
+        <div class="content-card mt-25">
+          <div class="findings-filter-header">
+            <h2>Detailed Vulnerability Catalog</h2>
+            <div class="filters-row">
+              <input type="text" id="finding-search-input" placeholder="Search by name, file or rule ID..." oninput="filterFindings()">
+              <select id="finding-severity-filter" onchange="filterFindings()">
+                <option value="ALL">All Severities</option>
+                <option value="CRITICAL">🔴 Critical Only</option>
+                <option value="HIGH">🟠 High Only</option>
+                <option value="MEDIUM">🟡 Medium Only</option>
+                <option value="LOW">🔵 Low Only</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Findings Accordion -->
+          <div class="findings-accordion" id="findings-list-accordion">
+            <!-- Populated via JavaScript -->
+          </div>
+        </div>
+
+      </section>
+
+      <!-- TAB: SAVED REPORTS -->
+      <section id="tab-reports" class="tab-pane">
+        <div class="content-card">
+          <div class="card-header">
+            <h2>Saved Vulnerability Reports</h2>
+            <button class="btn btn-secondary btn-sm" onclick="loadSavedReports()">
+              <i class="fa-solid fa-rotate"></i> Refresh List
+            </button>
+          </div>
+
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Project Name</th>
+                  <th>Grade</th>
+                  <th>Score</th>
+                  <th>Issues (C/H/M/L)</th>
+                  <th>Files Scanned</th>
+                  <th>Audit Date</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="saved-reports-tbody">
+                <!-- Populated via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: SETTINGS -->
+      <section id="tab-settings" class="tab-pane">
+        <div class="scan-hub-grid">
+          
+          <div class="content-card">
+            <h2>System Diagnostics</h2>
+            <p class="panel-helper-text">Verifies environment status and availability of vulnerability scanning dependencies.</p>
+            
+            <div class="diagnostics-list">
+              <div class="diag-item">
+                <span class="diag-label">Operating System</span>
+                <strong class="diag-value" id="diag-os">Windows (Detecting...)</strong>
+              </div>
+              <div class="diag-item">
+                <span class="diag-label">NodeJS Environment</span>
+                <strong class="diag-value" id="diag-node">v24.11 (Detecting...)</strong>
+              </div>
+              <div class="diag-item">
+                <span class="diag-label">Semgrep CLI Core</span>
+                <strong class="diag-value" id="diag-semgrep">Active / 1.165 (Detecting...)</strong>
+              </div>
+              <div class="diag-item">
+                <span class="diag-label">Secret & SCA Rules</span>
+                <strong class="diag-value green">Embedded (Active)</strong>
+              </div>
+            </div>
+            
+            <button class="btn btn-primary mt-20" onclick="runDiagnostics()">
+              <i class="fa-solid fa-arrows-rotate"></i> Run Self-Check Diagnostic
+            </button>
+          </div>
+
+          <div class="content-card">
+            <h2>Security Engine Profiles</h2>
+            <div class="engine-profile-card">
+              <div class="engine-icon"><i class="fa-solid fa-code"></i></div>
+              <div class="engine-desc">
+                <h3>Semgrep SAST (Primary)</h3>
+                <p>Applies static code rules to analyze data flow, taint tracking, and frameworks.</p>
+              </div>
+            </div>
+            <div class="engine-profile-card mt-15">
+              <div class="engine-icon"><i class="fa-solid fa-key"></i></div>
+              <div class="engine-desc">
+                <h3>Custom Entropy & Secrets (Supplemental)</h3>
+                <p>Scans matching lines recursively for high-entropy tokens, AWS keys, certificates, API tokens.</p>
+              </div>
+            </div>
+            <div class="engine-profile-card mt-15">
+              <div class="engine-icon"><i class="fa-solid fa-cube"></i></div>
+              <div class="engine-desc">
+                <h3>Composition Analysis (SCA)</h3>
+                <p>Reads manifest descriptors mapping outdated library versions directly to MITRE CWE / CVE data.</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+    </main>
+
+  </div>
+
+  <!-- JavaScript logic file -->
+  <script src="app.js"></script>
+</body>
+</html>
