@@ -593,12 +593,36 @@
 
             <!-- Results Panel -->
             <div class="content-card" id="wapt-results-panel" style="display:none;">
+              <!-- Results Toolbar -->
+              <div class="wapt-results-toolbar" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--border-color); margin-bottom: 15px;">
+                <h2 style="font-size: 0.95rem; font-weight: 700; margin: 0; color: var(--text-primary);">Security Assessment Intelligence</h2>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                  <button class="btn btn-secondary btn-sm" id="wapt-download-pdf-btn" onclick="downloadWaptPdf()" style="font-size: 0.74rem; padding: 4px 8px;"><i class="fa-solid fa-file-pdf" style="color: #f43f5e; margin-right: 4px;"></i> Export PDF</button>
+                  <div style="display: flex; align-items: center; gap: 6px; background: rgba(255, 255, 255, 0.03); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+                    <input type="checkbox" id="wapt-auditor-mode-switch" style="cursor: pointer;" onchange="toggleAuditorMode(this.checked)">
+                    <label for="wapt-auditor-mode-switch" style="font-size: 0.7rem; font-weight: 600; cursor: pointer; user-select: none; color: var(--text-muted);">Auditor Mode</label>
+                  </div>
+                </div>
+              </div>
+
               <div class="wapt-score-card pb-15" id="wapt-score-section" style="border-bottom:1px solid var(--border-color);">
                 <!-- Populated via JavaScript -->
               </div>
 
+              <!-- Discovered Attack Surface & Technologies -->
+              <div id="wapt-surface-section" class="mt-20"></div>
+
+              <!-- AI Correlated Attack Paths -->
+              <div id="wapt-paths-section" class="mt-20"></div>
+
+              <!-- OWASP Coverage Summary -->
+              <div id="wapt-owasp-section" class="mt-20" style="display:none;"></div>
+
+              <!-- Scanner Benchmarking Panel -->
+              <div id="wapt-benchmark-section" class="mt-20" style="display:none;"></div>
+
               <div class="wapt-findings-section mt-25">
-                <h3 style="margin-bottom:15px;">Identified Vulnerabilities</h3>
+                <h3 style="margin-bottom:15px;">Identified Vulnerabilities & Observations</h3>
                 <div id="wapt-findings-list">
                   <!-- Populated via JavaScript -->
                 </div>

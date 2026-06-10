@@ -1595,6 +1595,7 @@ body {
 .wapt-sev-pill.High     { background:rgba(249,115,22,.15); color:#f97316; }
 .wapt-sev-pill.Medium   { background:rgba(245,158,11,.15); color:#f59e0b; }
 .wapt-sev-pill.Low      { background:rgba(59,130,246,.15); color:#3b82f6; }
+.wapt-sev-pill.Info     { background:rgba(148,163,184,.15); color:#94a3b8; }
 
 .wapt-finding-card { border:1px solid var(--border-color,#334155); border-radius:10px;
   margin-bottom:.75rem; overflow:hidden; }
@@ -1606,6 +1607,7 @@ body {
 .wapt-sev-badge.High     { background:rgba(249,115,22,.15); color:#f97316; }
 .wapt-sev-badge.Medium   { background:rgba(245,158,11,.15); color:#f59e0b; }
 .wapt-sev-badge.Low      { background:rgba(59,130,246,.15); color:#3b82f6; }
+.wapt-sev-badge.Info     { background:rgba(148,163,184,.15); color:#94a3b8; }
 .wapt-finding-title { flex:1; font-size:.88rem; font-weight:600; }
 .wapt-finding-body { padding:.75rem 1rem 1rem; border-top:1px solid var(--border-color,#334155);
   font-size:.82rem; line-height:1.55; }
@@ -1642,10 +1644,71 @@ body {
 /* Raw HTTP boxes */
 .wapt-http-box { background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 0.75rem; font-family: 'Consolas', 'Courier New', monospace; font-size: 0.74rem; overflow-x: auto; white-space: pre; color: #cbd5e1; margin-top: 0.3rem; margin-bottom: 0.75rem; max-height: 250px; }
 .wapt-reasoning-box { background: rgba(255,255,255,0.02); border-left: 3px solid #64748b; padding: 0.5rem 0.75rem; border-radius: 0 6px 6px 0; font-size: 0.8rem; color: #94a3b8; line-height: 1.45; }
+.wapt-fp-box { background: rgba(139,92,246,0.03); border-left: 3px solid #8b5cf6; padding: 0.5rem 0.75rem; border-radius: 0 6px 6px 0; font-size: 0.8rem; color: #a78bfa; line-height: 1.45; }
+.wapt-impact-box { background: rgba(249,115,22,0.03); border-left: 3px solid #f97316; padding: 0.5rem 0.75rem; border-radius: 0 6px 6px 0; font-size: 0.8rem; color: #fdba74; line-height: 1.45; }
 
 .wapt-finding-category-tag { font-size: 0.7rem; padding: 0.15rem 0.45rem; border-radius: 4px; background: rgba(255,255,255,0.05); color: var(--text-muted,#64748b); border: 1px solid var(--border-color,#334155); margin-left: auto; }
 
 /* Confidence badges */
 .badge-conf-high { color: #22c55e; font-weight: 600; }
 .badge-conf-medium { color: #eab308; font-weight: 600; }
+.badge-conf-low { color: #f43f5e; font-weight: 600; }
+
+/* Attack Surface and Paths UI */
+.wapt-map-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem; margin-top: 0.5rem; }
+.wapt-map-card { background: rgba(30,41,59,0.4); border: 1px solid var(--border-color,#334155); border-radius: 8px; padding: 0.6rem 0.8rem; display: flex; align-items: center; gap: 0.6rem; }
+.wapt-map-card i { font-size: 1.1rem; color: #3b82f6; }
+.wapt-map-card-text { display: flex; flex-direction: column; }
+.wapt-map-card-title { font-size: 0.72rem; color: var(--text-muted,#64748b); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; }
+.wapt-map-card-value { font-size: 0.85rem; font-weight: 600; color: var(--text-primary,#f8fafc); }
+
+.wapt-path-chain { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; background: rgba(139,92,246,0.03); border: 1px solid rgba(139,92,246,0.15); border-radius: 8px; padding: 0.8rem 1rem; }
+.wapt-path-step { display: flex; align-items: center; gap: 0.6rem; font-size: 0.8rem; color: var(--text-primary,#f8fafc); }
+.wapt-path-step-num { width: 20px; height: 20px; border-radius: 50%; background: #8b5cf6; color: #fff; font-size: 0.7rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.wapt-path-arrow { display: flex; justify-content: flex-start; padding-left: 10px; color: #8b5cf6; font-size: 0.7rem; opacity: 0.6; }
+.wapt-path-description { font-size: 0.74rem; color: #cbd5e1; margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px solid rgba(139,92,246,0.1); line-height: 1.4; }
+.wapt-tech-tag { display: inline-block; font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 4px; background: rgba(59,130,246,0.1); color: #60a5fa; border: 1px solid rgba(59,130,246,0.2); margin-right: 0.4rem; margin-top: 0.4rem; font-weight: 600; }
+
 .badge-conf-low { color: #ef4444; font-weight: 600; }
+
+/* OWASP Coverage Summary */
+.wapt-owasp-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.6rem; }
+.wapt-owasp-row { display: flex; align-items: center; justify-content: space-between; font-size: 0.76rem; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color,#334155); border-radius: 6px; padding: 0.4rem 0.75rem; gap: 1rem; }
+.wapt-owasp-category { font-weight: 600; width: 240px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; color: #cbd5e1; }
+.wapt-owasp-bar-bg { flex: 1; height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; position: relative; }
+.wapt-owasp-bar { height: 100%; border-radius: 4px; transition: width 0.3s; }
+.wapt-owasp-bar.secured { background: #10b981; }
+.wapt-owasp-bar.flagged { background: #ef4444; }
+.wapt-owasp-bar.not-observed { background: #0ea5e9; }
+.wapt-owasp-bar.insufficient-coverage { background: #f59e0b; }
+.wapt-owasp-bar.not-tested { background: #475569; }
+.wapt-owasp-status { width: 150px; text-align: right; font-weight: 700; font-size: 0.68rem; text-transform: uppercase; }
+.wapt-owasp-status.secured { color: #10b981; }
+.wapt-owasp-status.flagged { color: #ef4444; }
+.wapt-owasp-status.not-observed { color: #0ea5e9; }
+.wapt-owasp-status.insufficient-coverage { color: #f59e0b; }
+.wapt-owasp-status.not-tested { color: #64748b; }
+
+/* Benchmarking Panel */
+.wapt-bench-card { background: rgba(30,41,59,0.3); border: 1px solid rgba(59,130,246,0.15); border-radius: 8px; padding: 0.8rem 1rem; margin-top: 0.75rem; }
+.wapt-bench-table { width: 100%; border-collapse: collapse; margin-top: 0.6rem; font-size: 0.76rem; }
+.wapt-bench-table th, .wapt-bench-table td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color,#334155); }
+.wapt-bench-table th { color: var(--text-muted,#64748b); font-weight: 600; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; }
+.wapt-bench-table td { color: #cbd5e1; }
+.wapt-bench-badge { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 4px; font-weight: 700; font-size: 0.68rem; text-transform: uppercase; }
+.wapt-bench-badge.pass { background: rgba(34,197,94,0.15); color: #22c55e; border: 1px solid rgba(34,197,94,0.3); }
+
+/* WAPT V2 Tech Details & Discovery Metrics Grid */
+.wapt-tech-item-card { background: rgba(30,41,59,0.4); border: 1px solid var(--border-color,#334155); border-radius: 6px; padding: 0.5rem 0.75rem; margin-bottom: 0.5rem; }
+.wapt-tech-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; }
+.wapt-tech-item-name { font-size: 0.8rem; font-weight: 700; color: #f8fafc; }
+.wapt-tech-item-conf { font-size: 0.74rem; font-weight: 700; color: #60a5fa; }
+.wapt-tech-item-evidence { font-size: 0.7rem; color: var(--text-muted,#64748b); font-family: monospace; }
+
+/* Auditor Mode styling */
+.auditor-mode-only { display: none; margin-top: 10px; border-left: 3px solid #10b981; padding-left: 10px; background: rgba(16,185,129,0.03); padding-top: 8px; padding-bottom: 8px; border-radius: 0 6px 6px 0; }
+.auditor-title { font-size: 0.74rem; font-weight: 700; color: #10b981; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+.auditor-desc { font-size: 0.74rem; color: #cbd5e1; line-height: 1.4; }
+.auditor-list-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; font-size: 0.72rem; color: #94a3b8; }
+.auditor-list-item { background: rgba(255,255,255,0.02); padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05); }
+

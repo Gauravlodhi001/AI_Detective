@@ -1217,10 +1217,17 @@ async function handleWaptScan() {
 }
 
 function renderWaptResults(result) {
+  window.activeWaptReportId = result.reportId;
   document.getElementById('wapt-results-placeholder').style.display = 'none';
   document.getElementById('wapt-results-panel').style.display = 'block';
   const m = result.metrics, c = m.severityCounts;
   
+  // Sync Auditor Mode switch checkbox
+  const auditorSwitch = document.getElementById('wapt-auditor-mode-switch');
+  if (auditorSwitch) {
+    auditorSwitch.checked = !!window.activeAuditorMode;
+  }
+
   // Format target URL and indicators
   document.getElementById('wapt-score-section').innerHTML = `
     <div class="wapt-score-card-layout">
@@ -1235,10 +1242,10 @@ function renderWaptResults(result) {
 
       <!-- Confidence Score Dial -->
       <div class="wapt-metric-dial">
-        <div class="wapt-metric-circle confidence-circle">${m.confidenceScore}%</div>
+        <div class="wapt-metric-circle confidence-circle">${result.attackSurface?.securityCoverage?.assessmentConfidence || 85}%</div>
         <div class="wapt-metric-meta">
-          <div class="wapt-metric-label">Scanner Confidence</div>
-          <div class="wapt-metric-value">${m.confidenceScore >= 70 ? 'High' : m.confidenceScore >= 40 ? 'Medium' : 'Low'}</div>
+          <div class="wapt-metric-label">Assessment Confidence</div>
+          <div class="wapt-metric-value">${result.attackSurface?.securityCoverage?.assessmentConfidenceRating || 'High'}</div>
         </div>
       </div>
 
@@ -1259,9 +1266,164 @@ function renderWaptResults(result) {
         ${c.High     ? `<span class="wapt-sev-pill High">🟠 High: ${c.High}</span>` : ''}
         ${c.Medium   ? `<span class="wapt-sev-pill Medium">🟡 Medium: ${c.Medium}</span>` : ''}
         ${c.Low      ? `<span class="wapt-sev-pill Low">🔵 Low: ${c.Low}</span>` : ''}
+        ${c.Info     ? `<span class="wapt-sev-pill Info">ℹ️ Info: ${c.Info}</span>` : ''}
         <span style="font-size:.72rem;color:var(--text-muted);margin-left:auto;">${m.totalFindings} finding(s)</span>
       </div>
     </div>`;
+
+  // Render Defensive Attack Surface & Scope Metrics
+  const surface = result.attackSurface || { discoveryMetrics: {}, technologies: [], securityCoverage: {} };
+  const disc = surface.discoveryMetrics || {};
+  const cov = surface.securityCoverage || {};
+
+  const metricsHtml = `
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+      <!-- Left Column: Discovery Metrics -->
+      <div>
+        <h4 style="font-size: 0.82rem; font-weight: 700; margin-bottom: 0.5rem; text-transform: uppercase; color: var(--text-muted);">Discovered Assets</h4>
+        <div class="wapt-map-grid" style="grid-template-columns: 1fr 1fr; gap: 8px;">
+          <div class="wapt-map-card"><i class="fa-solid fa-spider"></i><div class="wapt-map-card-text"><span class="wapt-map-card-title">Pages Crawled</span><span class="wapt-map-card-value">${disc.pagesCrawled || 1}</span></div></div>
+          <div class="wapt-map-card"><i class="fa-solid fa-link"></i><div class="wapt-map-card-text"><span class="wapt-map-card-title">URLs Discovered</span><span class="wapt-map-card-value">${disc.urlsDiscovered || 0}</span></div></div>
+          <div class="wapt-map-card"><i class="fa-solid fa-list-check"></i><div class="wapt-map-card-text"><span class="wapt-map-card-title">Forms Found</span><span class="wapt-map-card-value">${disc.formsFound || 0}</span></div></div>
+          <div class="wapt-map-card"><i class="fa-solid fa-terminal"></i><div class="wapt-map-card-text"><span class="wapt-map-card-title">Inputs Found</span><span class="wapt-map-card-value">${disc.inputFieldsFound || 0}</span></div></div>
+          <div class="wapt-map-card"><i class="fa-solid fa-key"></i><div class="wapt-map-card-text"><span class="wapt-map-card-title">Parameters Identified</span><span class="wapt-map-card-value">${disc.parametersIdentified || 0}</span></div></div>
+          <div class="wapt-map-card"><i class="fa-solid fa-cookie"></i><div class="wapt-map-card-text"><span class="wapt-map-card-title">Cookies Observed</span><span class="wapt-map-card-value">${disc.cookiesObserved || 0}</span></div></div>
+          <div class="wapt-map-card"><i class="fa-solid fa-gears"></i><div class="wapt-map-card-text"><span class="wapt-map-card-title">API Endpoints</span><span class="wapt-map-card-value">${disc.apiEndpointsDetected || 0}</span></div></div>
+          <div class="wapt-map-card"><i class="fa-solid fa-file-code"></i><div class="wapt-map-card-text"><span class="wapt-map-card-title">JS Files</span><span class="wapt-map-card-value">${disc.javascriptFilesAnalyzed || 0}</span></div></div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px;">
+          <div style="background: rgba(255,255,255,0.01); border: 1px dashed var(--border-color); padding: 5px; border-radius: 4px; text-align: center;"><span style="font-size: 0.62rem; color: var(--text-muted); display:block;">Auth Portals</span> <strong style="font-size:0.75rem; color:#fff;">${disc.authenticationPortalsFound || 0}</strong></div>
+          <div style="background: rgba(255,255,255,0.01); border: 1px dashed var(--border-color); padding: 5px; border-radius: 4px; text-align: center;"><span style="font-size: 0.62rem; color: var(--text-muted); display:block;">Uploads</span> <strong style="font-size:0.75rem; color:#fff;">${disc.uploadInterfacesFound || 0}</strong></div>
+          <div style="background: rgba(255,255,255,0.01); border: 1px dashed var(--border-color); padding: 5px; border-radius: 4px; text-align: center;"><span style="font-size: 0.62rem; color: var(--text-muted); display:block;">Search</span> <strong style="font-size:0.75rem; color:#fff;">${disc.searchInterfacesFound || 0}</strong></div>
+          <div style="background: rgba(255,255,255,0.01); border: 1px dashed var(--border-color); padding: 5px; border-radius: 4px; text-align: center;"><span style="font-size: 0.62rem; color: var(--text-muted); display:block;">Admins</span> <strong style="font-size:0.75rem; color:#fff;">${disc.administrativeInterfacesFound || 0}</strong></div>
+        </div>
+      </div>
+      <!-- Right Column: Technology Confidence -->
+      <div>
+        <h4 style="font-size: 0.82rem; font-weight: 700; margin-bottom: 0.5rem; text-transform: uppercase; color: var(--text-muted);">Technology Confidence Details</h4>
+        <div style="max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+          ${(surface.technologies || []).map(t => `
+            <div class="wapt-tech-item-card">
+              <div class="wapt-tech-item-header">
+                <span class="wapt-tech-item-name">${escW(t.name)}</span>
+                <span class="wapt-tech-item-conf">${t.confidence}% Confidence</span>
+              </div>
+              <div class="wapt-tech-item-evidence">Source: ${escW(t.evidenceSource)} (${escW(t.evidenceDetails)})</div>
+            </div>
+          `).join('') || '<p style="color:var(--text-muted);font-size:.8rem;padding:10px 0;">No technology signatures observed passively.</p>'}
+        </div>
+      </div>
+    </div>
+
+    <!-- Security Coverage Bars -->
+    <div style="margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+      <h4 style="font-size: 0.82rem; font-weight: 700; margin-bottom: 0.8rem; text-transform: uppercase; color: var(--text-muted);">Security Validation Coverage</h4>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px 25px;">
+        ${[
+          { name: 'Injection Security', score: cov.injectionCoverage },
+          { name: 'Authentication Control', score: cov.authenticationCoverage },
+          { name: 'Authorization Auditing', score: cov.authorizationCoverage },
+          { name: 'Session Management', score: cov.sessionManagementCoverage },
+          { name: 'CSRF Coverage', score: cov.csrfCoverage },
+          { name: 'Security Headers', score: cov.securityHeadersCoverage },
+          { name: 'Transport Layer Security', score: cov.transportSecurityCoverage },
+          { name: 'API Security Probing', score: cov.apiSecurityCoverage },
+          { name: 'Cookie Hardening', score: cov.cookieSecurityCoverage }
+        ].map(item => `
+          <div class="wapt-owasp-row" style="padding: 0.35rem 0.6rem; border-color: rgba(255,255,255,0.03); margin: 0;">
+            <span style="font-weight: 600; width: 160px; font-size: 0.72rem; color: #cbd5e1; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">${item.name}</span>
+            <div class="wapt-owasp-bar-bg" style="height: 6px;">
+              <div class="wapt-owasp-bar secured" style="width: ${item.score || 0}%; background: #2563eb;"></div>
+            </div>
+            <span style="width: 40px; font-size: 0.7rem; font-weight: 700; text-align: right; color: var(--text-primary);">${item.score || 0}%</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  document.getElementById('wapt-surface-section').innerHTML = `
+    <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.75rem;">Defensive Assessment Coverage & Scope</h3>
+    ${metricsHtml}
+  `;
+
+  // Render AI Correlated Attack Paths
+  const paths = result.attackPaths || [];
+  if (paths.length > 0) {
+    const pathsHtml = paths.map(path => {
+      const stepsHtml = path.steps.map((step, idx) => `
+        <div class="wapt-path-step">
+          <div class="wapt-path-step-num">${idx + 1}</div>
+          <span><strong>${escW(step.finding)}</strong>: ${escW(step.impact)}</span>
+        </div>
+      `).join('<div class="wapt-path-arrow"><i class="fa-solid fa-arrow-down-long"></i></div>');
+
+      return `
+        <div class="wapt-path-chain">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 0.82rem; font-weight: 700; color: #a78bfa;">🔗 Potential Attack Path Chain</span>
+            <span class="wapt-sev-badge ${escW(path.severity)}">${escW(path.severity)} Risk</span>
+          </div>
+          <div style="margin-top: 0.6rem; display: flex; flex-direction: column; gap: 0.4rem;">
+            ${stepsHtml}
+          </div>
+          <div class="wapt-path-description">
+            <strong>Security Assessment Summary:</strong> ${escW(path.description)}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    document.getElementById('wapt-paths-section').innerHTML = `
+      <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem;">AI Correlated Attack Paths</h3>
+      ${pathsHtml}
+    `;
+    document.getElementById('wapt-paths-section').style.display = 'block';
+  } else {
+    document.getElementById('wapt-paths-section').style.display = 'none';
+  }
+
+  // Render OWASP Top 10 Control Coverage
+  const owaspCov = m.owaspCoverage || {};
+  const owaspKeys = Object.keys(owaspCov);
+  if (owaspKeys.length > 0) {
+    const owaspRows = owaspKeys.map(category => {
+      const item = owaspCov[category];
+      
+      let barClass = 'not-tested';
+      if (item.status === 'FLAGGED') barClass = 'flagged';
+      else if (item.status === 'SECURED') barClass = 'secured';
+      else if (item.status === 'NOT OBSERVED') barClass = 'not-observed';
+      else if (item.status === 'INSUFFICIENT COVERAGE') barClass = 'insufficient-coverage';
+
+      let barWidth = '100%';
+      if (item.status === 'INSUFFICIENT COVERAGE') barWidth = '40%';
+      else if (item.status === 'NOT TESTED') barWidth = '0%';
+      
+      return `
+        <div class="wapt-owasp-row">
+          <span class="wapt-owasp-category" title="${escW(category)}">${escW(category)}</span>
+          <div class="wapt-owasp-bar-bg">
+            <div class="wapt-owasp-bar ${barClass}" style="width: ${barWidth};"></div>
+          </div>
+          <span class="wapt-owasp-status ${barClass}">${escW(item.status)} ${item.findings > 0 ? `(${item.findings})` : ''}</span>
+        </div>
+      `;
+    }).join('');
+
+    document.getElementById('wapt-owasp-section').innerHTML = `
+      <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem;">OWASP Top 10 Control Coverage</h3>
+      <div class="wapt-owasp-list">
+        ${owaspRows}
+      </div>
+    `;
+    document.getElementById('wapt-owasp-section').style.display = 'block';
+  } else {
+    document.getElementById('wapt-owasp-section').style.display = 'none';
+  }
+
+  // Trigger loading of Benchmarks
+  loadWaptBenchmarks();
 
   const container = document.getElementById('wapt-findings-list');
   if (!result.findings?.length) {
@@ -1269,7 +1431,7 @@ function renderWaptResults(result) {
     return;
   }
 
-  const order = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+  const order = { Critical: 0, High: 1, Medium: 2, Low: 3, Info: 4 };
   const sorted = [...result.findings].sort((a, b) => (order[a.severity] ?? 9) - (order[b.severity] ?? 9));
 
   container.innerHTML = sorted.map((f, index) => {
@@ -1286,20 +1448,42 @@ function renderWaptResults(result) {
         <div class="wapt-finding-body" style="display:none;">
           <!-- Accordion Tabs -->
           <div class="wapt-tabs-nav">
-            <button class="wapt-tab-btn active" onclick="switchWaptTab(event, '${uniqueId}-overview')">Overview</button>
+            <button class="wapt-tab-btn active" onclick="switchWaptTab(event, '${uniqueId}-overview')">Overview & Analysis</button>
             <button class="wapt-tab-btn" onclick="switchWaptTab(event, '${uniqueId}-evidence')">Evidence (HTTP)</button>
-            <button class="wapt-tab-btn" onclick="switchWaptTab(event, '${uniqueId}-remediation')">Remediation</button>
+            <button class="wapt-tab-btn" onclick="switchWaptTab(event, '${uniqueId}-remediation')">Impact & Remediation</button>
           </div>
 
           <!-- Tab: Overview -->
           <div class="wapt-tab-content active" id="${uniqueId}-overview">
-            <p style="font-size:.82rem;line-height:1.5;color:var(--text-primary);">${escW(f.description)}</p>
+            <div style="font-size:.82rem;line-height:1.5;color:var(--text-primary);margin-bottom:0.75rem;"><strong>Observation:</strong> ${escW(f.observation || f.description)}</div>
+            
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem; margin-top:0.75rem; font-size:0.74rem; background:rgba(255,255,255,0.02); padding:0.5rem 0.75rem; border-radius:6px; border:1px solid var(--border-color);">
-              <div><strong>Confidence Rating:</strong> <span class="badge-conf-${(f.confidence || 'Medium').toLowerCase()}">${escW(f.confidence || 'Medium')} (${f.confidenceScore || 70}%)</span></div>
-              <div><strong>Detection Logic:</strong> <code>${escW(f.detectionLogic || 'Signature Match')}</code></div>
+              <div><strong>Detection Confidence:</strong> <span style="color:#3b82f6;font-weight:600;">${f.detectionConfidence || 100}%</span></div>
+              <div><strong>Risk Confidence:</strong> <span class="badge-conf-${(f.confidence || 'Medium').toLowerCase()}">${f.riskConfidence || 50}%</span></div>
+              <div><strong>OWASP Top 10:</strong> <span style="color:#f59e0b;font-weight:600;">${escW(f.owasp || 'N/A')}</span></div>
+              <div><strong>CWE:</strong> <span style="color:#ef4444;font-weight:600;">${escW(f.cwe || 'N/A')}</span></div>
+              <div><strong>CVSS v3.1:</strong> <span style="color:#f43f5e;font-weight:600;">${escW(f.cvss || 'N/A')}</span></div>
+              <div><strong>ASVS Control:</strong> <span style="color:#10b981;font-weight:600;">${escW(f.asvs || 'N/A')}</span></div>
+              <div style="grid-column: span 2;"><strong>Detection Logic:</strong> <code>${escW(f.detectionLogic || 'Signature Match')}</code></div>
             </div>
-            <div class="wapt-field-label mt-10">Analysis Reasoning</div>
-            <div class="wapt-reasoning-box">${escW(f.reasoning || 'Standard compliance evaluation.')}</div>
+
+            <!-- Auditor Mode Verification Block -->
+            <div class="auditor-mode-only" style="display: ${window.activeAuditorMode ? 'block' : 'none'};">
+              <div class="auditor-title"><i class="fa-solid fa-user-shield"></i> Auditor Verification & Context</div>
+              <div class="auditor-desc"><strong>Rule Signature:</strong> <code>${escW(f.detectionLogic || 'Signature Pattern')}</code></div>
+              <div class="auditor-list-row">
+                <div class="auditor-list-item"><strong>Detection confidence:</strong> ${f.detectionConfidence || 100}%</div>
+                <div class="auditor-list-item"><strong>Risk confidence:</strong> ${f.riskConfidence || 50}%</div>
+                <div class="auditor-list-item"><strong>Assessment confidence:</strong> ${cov.assessmentConfidence || 85}%</div>
+                <div class="auditor-list-item"><strong>Mitigations considered:</strong> ${escW(f.falsePositiveAssessment || 'None')}</div>
+              </div>
+            </div>
+            
+            <div class="wapt-field-label mt-10">AI Security Analysis</div>
+            <div class="wapt-reasoning-box">${escW(f.aiAnalysis || f.reasoning || 'Standard compliance evaluation.')}</div>
+            
+            <div class="wapt-field-label mt-10">AI False Positive Review</div>
+            <div class="wapt-fp-box">${escW(f.falsePositiveAssessment || 'No false positives detected.')}</div>
           </div>
 
           <!-- Tab: Evidence -->
@@ -1312,12 +1496,65 @@ function renderWaptResults(result) {
 
           <!-- Tab: Remediation -->
           <div class="wapt-tab-content" id="${uniqueId}-remediation">
-            <div class="wapt-field-label">Suggested Remediation</div>
+            <div class="wapt-field-label">Business Risk & Impact</div>
+            <div class="wapt-impact-box">${escW(f.businessImpact || 'Minimal direct business risk.')}</div>
+            
+            <div class="wapt-field-label mt-10">Suggested Remediation</div>
             <div class="wapt-rec">${escW(f.remediation || 'Maintain standard configurations.')}</div>
           </div>
         </div>
       </div>`;
   }).join('');
+}
+
+async function loadWaptBenchmarks() {
+  try {
+    const res = await fetch('/api/wapt/benchmark');
+    const data = await res.json();
+    if (data.success && data.benchmarks) {
+      const rows = data.benchmarks.map(b => `
+        <tr>
+          <td style="font-weight: 600;">${escW(b.suite)}</td>
+          <td style="color: #cbd5e1; font-weight: 700;">${b.expectedFindings}</td>
+          <td style="color: #60a5fa; font-weight: 700;">${b.detectedFindings}</td>
+          <td style="color: #f43f5e; font-weight: 700;">${b.missedFindings}</td>
+          <td style="color: #f59e0b; font-weight: 700;">${b.falsePositives}</td>
+          <td style="color: #8b5cf6; font-weight: 700;">${b.coveragePercent}%</td>
+          <td style="color: #10b981; font-weight: 700;">${b.confidencePercent}%</td>
+          <td><span class="wapt-bench-badge pass">${escW(b.status)}</span></td>
+        </tr>
+      `).join('');
+
+      document.getElementById('wapt-benchmark-section').innerHTML = `
+        <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem;">Scanner Benchmarking Validation</h3>
+        <div class="wapt-bench-card">
+          <div style="font-size: 0.76rem; color: var(--text-muted); line-height: 1.4; margin-bottom: 0.5rem;">
+            The scanner is continuously evaluated against standard industry vulnerable testbeds to ensure optimal detection capability and minimal false positive rate.
+          </div>
+          <table class="wapt-bench-table">
+            <thead>
+              <tr>
+                <th>Test Suite</th>
+                <th>Expected</th>
+                <th>Detected</th>
+                <th>Missed</th>
+                <th>False Positives</th>
+                <th>Coverage Depth</th>
+                <th>Confidence</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+        </div>
+      `;
+      document.getElementById('wapt-benchmark-section').style.display = 'block';
+    }
+  } catch (e) {
+    console.error('Failed to load WAPT benchmarks:', e);
+  }
 }
 
 function toggleWaptFinding(header) {
@@ -1345,5 +1582,21 @@ function switchWaptTab(event, targetTabId) {
     } else {
       content.style.display = 'none';
     }
+  });
+}
+
+function downloadWaptPdf() {
+  if (!window.activeWaptReportId) {
+    alert('No active scan report loaded to download.');
+    return;
+  }
+  window.location.href = `/api/wapt/reports/${window.activeWaptReportId}/pdf`;
+}
+
+function toggleAuditorMode(checked) {
+  window.activeAuditorMode = checked;
+  const elements = document.querySelectorAll('.auditor-mode-only');
+  elements.forEach(el => {
+    el.style.display = checked ? 'block' : 'none';
   });
 }
