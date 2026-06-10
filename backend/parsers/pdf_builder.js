@@ -604,6 +604,8 @@ function buildPdfReport(reportData, res) {
 
   // End page decorations helper to add Header/Footer page numbers dynamically
   addPageDecorations();
+
+  doc.end();
 }
 
 module.exports = {
