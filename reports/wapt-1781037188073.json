@@ -1,0 +1,606 @@
+{
+  "reportId": "wapt-1781037188073",
+  "type": "wapt",
+  "targetUrl": "http://localhost:3000",
+  "scanTime": 1781037188073,
+  "scanDurationMs": 263,
+  "checksPerformed": 10,
+  "findings": [
+    {
+      "severity": "High",
+      "category": "Security Headers",
+      "title": "Missing Content-Security-Policy",
+      "description": "The Content-Security-Policy (CSP) header is missing, exposing the application to Cross-Site Scripting (XSS) and clickjacking attacks.",
+      "evidence": "Header content-security-policy is absent",
+      "recommendation": "Implement a strict Content-Security-Policy header."
+    },
+    {
+      "severity": "Medium",
+      "category": "Security Headers",
+      "title": "Missing Strict-Transport-Security Header",
+      "description": "The Strict-Transport-Security (HSTS) header is missing, allowing connections over insecure HTTP.",
+      "evidence": "Header strict-transport-security is absent",
+      "recommendation": "Enable HSTS by adding the Strict-Transport-Security header."
+    },
+    {
+      "severity": "Medium",
+      "category": "Security Headers",
+      "title": "Missing X-Frame-Options Header",
+      "description": "The X-Frame-Options header is missing, rendering the application vulnerable to Clickjacking attacks.",
+      "evidence": "Header x-frame-options is absent",
+      "recommendation": "Configure X-Frame-Options to DENY or SAMEORIGIN."
+    },
+    {
+      "severity": "Low",
+      "category": "Security Headers",
+      "title": "Missing X-Content-Type-Options Header",
+      "description": "The X-Content-Type-Options header is missing, allowing browsers to MIME-sniff response content types.",
+      "evidence": "Header x-content-type-options is absent",
+      "recommendation": "Set the X-Content-Type-Options header to nosniff."
+    },
+    {
+      "severity": "Low",
+      "category": "Security Headers",
+      "title": "Missing Referrer-Policy Header",
+      "description": "The Referrer-Policy header is missing, which could leak sensitive information in referrer URLs to third parties.",
+      "evidence": "Header referrer-policy is absent",
+      "recommendation": "Add Referrer-Policy: no-referrer-when-downgrade or strict-origin-when-cross-origin."
+    },
+    {
+      "severity": "Low",
+      "category": "Security Headers",
+      "title": "Missing Permissions-Policy Header",
+      "description": "The Permissions-Policy header is missing, which controls browser features and APIs available to the page.",
+      "evidence": "Header permissions-policy is absent",
+      "recommendation": "Implement a Permissions-Policy header."
+    },
+    {
+      "severity": "High",
+      "category": "SSL/TLS",
+      "title": "Missing HTTPS Encryption",
+      "description": "The target application is hosted over HTTP. Traffic is transmitted in plain text, making it vulnerable to sniffing and man-in-the-middle (MITM) attacks.",
+      "evidence": "Protocol: HTTP | URL: http://localhost:3000",
+      "recommendation": "Enable SSL/TLS and redirect all traffic to HTTPS."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /.git/HEAD",
+      "description": "Accessing /.git/HEAD returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/.git/HEAD | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /.env",
+      "description": "Accessing /.env returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/.env | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /config.php",
+      "description": "Accessing /config.php returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/config.php | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /wp-config.php",
+      "description": "Accessing /wp-config.php returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/wp-config.php | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /web.config",
+      "description": "Accessing /web.config returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/web.config | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /phpinfo.php",
+      "description": "Accessing /phpinfo.php returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/phpinfo.php | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /server-status",
+      "description": "Accessing /server-status returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/server-status | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /admin",
+      "description": "Accessing /admin returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/admin | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /administrator",
+      "description": "Accessing /administrator returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/administrator | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /backup",
+      "description": "Accessing /backup returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/backup | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /api/swagger",
+      "description": "Accessing /api/swagger returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/api/swagger | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /api/docs",
+      "description": "Accessing /api/docs returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/api/docs | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /swagger-ui.html",
+      "description": "Accessing /swagger-ui.html returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/swagger-ui.html | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /actuator",
+      "description": "Accessing /actuator returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/actuator | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /actuator/env",
+      "description": "Accessing /actuator/env returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/actuator/env | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /actuator/health",
+      "description": "Accessing /actuator/health returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/actuator/health | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /.htaccess",
+      "description": "Accessing /.htaccess returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/.htaccess | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /robots.txt",
+      "description": "Accessing /robots.txt returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/robots.txt | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /sitemap.xml",
+      "description": "Accessing /sitemap.xml returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/sitemap.xml | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /config/database.yml",
+      "description": "Accessing /config/database.yml returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/config/database.yml | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /.DS_Store",
+      "description": "Accessing /.DS_Store returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/.DS_Store | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /dump.sql",
+      "description": "Accessing /dump.sql returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/dump.sql | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /db.sql",
+      "description": "Accessing /db.sql returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/db.sql | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /backup.zip",
+      "description": "Accessing /backup.zip returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/backup.zip | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "CORS Configuration",
+      "title": "Loose CORS Policy (Wildcard ACAO)",
+      "description": "The Access-Control-Allow-Origin header is set to a wildcard (*), allowing any site to perform cross-origin reads of responses.",
+      "evidence": "Access-Control-Allow-Origin: *",
+      "recommendation": "Specify specific domain names in Access-Control-Allow-Origin instead of using a wildcard (*)."
+    },
+    {
+      "severity": "Low",
+      "category": "Server Banner Leakage",
+      "title": "Powered-By Header Disclosure: Express",
+      "description": "The application leaks technology components (e.g. Express, ASP.NET, PHP) in the X-Powered-By header, exposing details of the application framework.",
+      "evidence": "X-Powered-By: Express",
+      "recommendation": "Disable the X-Powered-By header in the server configuration middleware."
+    }
+  ],
+  "allFindings": [
+    {
+      "severity": "High",
+      "category": "Security Headers",
+      "title": "Missing Content-Security-Policy",
+      "description": "The Content-Security-Policy (CSP) header is missing, exposing the application to Cross-Site Scripting (XSS) and clickjacking attacks.",
+      "evidence": "Header content-security-policy is absent",
+      "recommendation": "Implement a strict Content-Security-Policy header."
+    },
+    {
+      "severity": "Medium",
+      "category": "Security Headers",
+      "title": "Missing Strict-Transport-Security Header",
+      "description": "The Strict-Transport-Security (HSTS) header is missing, allowing connections over insecure HTTP.",
+      "evidence": "Header strict-transport-security is absent",
+      "recommendation": "Enable HSTS by adding the Strict-Transport-Security header."
+    },
+    {
+      "severity": "Medium",
+      "category": "Security Headers",
+      "title": "Missing X-Frame-Options Header",
+      "description": "The X-Frame-Options header is missing, rendering the application vulnerable to Clickjacking attacks.",
+      "evidence": "Header x-frame-options is absent",
+      "recommendation": "Configure X-Frame-Options to DENY or SAMEORIGIN."
+    },
+    {
+      "severity": "Low",
+      "category": "Security Headers",
+      "title": "Missing X-Content-Type-Options Header",
+      "description": "The X-Content-Type-Options header is missing, allowing browsers to MIME-sniff response content types.",
+      "evidence": "Header x-content-type-options is absent",
+      "recommendation": "Set the X-Content-Type-Options header to nosniff."
+    },
+    {
+      "severity": "Low",
+      "category": "Security Headers",
+      "title": "Missing Referrer-Policy Header",
+      "description": "The Referrer-Policy header is missing, which could leak sensitive information in referrer URLs to third parties.",
+      "evidence": "Header referrer-policy is absent",
+      "recommendation": "Add Referrer-Policy: no-referrer-when-downgrade or strict-origin-when-cross-origin."
+    },
+    {
+      "severity": "Low",
+      "category": "Security Headers",
+      "title": "Missing Permissions-Policy Header",
+      "description": "The Permissions-Policy header is missing, which controls browser features and APIs available to the page.",
+      "evidence": "Header permissions-policy is absent",
+      "recommendation": "Implement a Permissions-Policy header."
+    },
+    {
+      "severity": "Info",
+      "category": "HTTP Methods",
+      "title": "Insecure HTTP Methods Disabled",
+      "description": "The tested HTTP methods (PUT, DELETE, TRACE, CONNECT, PATCH) are properly disabled or restricted.",
+      "evidence": "All tested methods returned status >= 400",
+      "recommendation": "Ensure web server configurations continue to block unsupported HTTP methods."
+    },
+    {
+      "severity": "High",
+      "category": "SSL/TLS",
+      "title": "Missing HTTPS Encryption",
+      "description": "The target application is hosted over HTTP. Traffic is transmitted in plain text, making it vulnerable to sniffing and man-in-the-middle (MITM) attacks.",
+      "evidence": "Protocol: HTTP | URL: http://localhost:3000",
+      "recommendation": "Enable SSL/TLS and redirect all traffic to HTTPS."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /.git/HEAD",
+      "description": "Accessing /.git/HEAD returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/.git/HEAD | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /.env",
+      "description": "Accessing /.env returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/.env | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /config.php",
+      "description": "Accessing /config.php returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/config.php | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /wp-config.php",
+      "description": "Accessing /wp-config.php returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/wp-config.php | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /web.config",
+      "description": "Accessing /web.config returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/web.config | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /phpinfo.php",
+      "description": "Accessing /phpinfo.php returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/phpinfo.php | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /server-status",
+      "description": "Accessing /server-status returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/server-status | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /admin",
+      "description": "Accessing /admin returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/admin | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /administrator",
+      "description": "Accessing /administrator returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/administrator | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /backup",
+      "description": "Accessing /backup returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/backup | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /api/swagger",
+      "description": "Accessing /api/swagger returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/api/swagger | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /api/docs",
+      "description": "Accessing /api/docs returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/api/docs | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /swagger-ui.html",
+      "description": "Accessing /swagger-ui.html returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/swagger-ui.html | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /actuator",
+      "description": "Accessing /actuator returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/actuator | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /actuator/env",
+      "description": "Accessing /actuator/env returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/actuator/env | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /actuator/health",
+      "description": "Accessing /actuator/health returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/actuator/health | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /.htaccess",
+      "description": "Accessing /.htaccess returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/.htaccess | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /robots.txt",
+      "description": "Accessing /robots.txt returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/robots.txt | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /sitemap.xml",
+      "description": "Accessing /sitemap.xml returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/sitemap.xml | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /config/database.yml",
+      "description": "Accessing /config/database.yml returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/config/database.yml | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Medium",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /.DS_Store",
+      "description": "Accessing /.DS_Store returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/.DS_Store | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /dump.sql",
+      "description": "Accessing /dump.sql returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/dump.sql | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /db.sql",
+      "description": "Accessing /db.sql returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/db.sql | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Critical",
+      "category": "Directory Enumeration",
+      "title": "Exposed Sensitive Path: /backup.zip",
+      "description": "Accessing /backup.zip returned HTTP status 200. This path might expose sensitive configurations, repository files, database dumps, or administrative consoles to attackers.",
+      "evidence": "URL: http://localhost:3000/backup.zip | Status: 200 | Body sample: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"wi",
+      "recommendation": "Restrict access to this directory, remove the files, or return a 404 error code."
+    },
+    {
+      "severity": "Info",
+      "category": "Cross-Site Scripting (XSS)",
+      "title": "Reflected XSS Checks Passed",
+      "description": "No unescaped reflection of scripting payloads was detected in the tested input fields.",
+      "evidence": "Probed parameters q, search, name, input with standard XSS script alert.",
+      "recommendation": "Ensure strict contextual output escaping is maintained."
+    },
+    {
+      "severity": "Info",
+      "category": "SQL Injection",
+      "title": "SQL Injection Checks Passed",
+      "description": "No database query errors or SQL syntax leaks were detected in response to dynamic probes.",
+      "evidence": "Probed parameters id, user, username, query, q, search, product with 4 SQL injection sequences.",
+      "recommendation": "Continue enforcing SQL parameterization across all query operations."
+    },
+    {
+      "severity": "Info",
+      "category": "Open Redirect",
+      "title": "Open Redirect Checks Passed",
+      "description": "No arbitrary redirection to external evil domains was detected during parameters probing.",
+      "evidence": "Tested 8 typical redirect parameters with external domain payload.",
+      "recommendation": "Maintain local redirect verification checks."
+    },
+    {
+      "severity": "Medium",
+      "category": "CORS Configuration",
+      "title": "Loose CORS Policy (Wildcard ACAO)",
+      "description": "The Access-Control-Allow-Origin header is set to a wildcard (*), allowing any site to perform cross-origin reads of responses.",
+      "evidence": "Access-Control-Allow-Origin: *",
+      "recommendation": "Specify specific domain names in Access-Control-Allow-Origin instead of using a wildcard (*)."
+    },
+    {
+      "severity": "Info",
+      "category": "Cookie Security",
+      "title": "No Session Cookies Set",
+      "description": "The target endpoint did not issue any Set-Cookie headers in the audited response.",
+      "evidence": "No Set-Cookie header present.",
+      "recommendation": "Ensure cookies continue to be avoided if session tokens are handled via custom headers."
+    },
+    {
+      "severity": "Low",
+      "category": "Server Banner Leakage",
+      "title": "Powered-By Header Disclosure: Express",
+      "description": "The application leaks technology components (e.g. Express, ASP.NET, PHP) in the X-Powered-By header, exposing details of the application framework.",
+      "evidence": "X-Powered-By: Express",
+      "recommendation": "Disable the X-Powered-By header in the server configuration middleware."
+    }
+  ],
+  "metrics": {
+    "totalFindings": 33,
+    "severityCounts": {
+      "Critical": 10,
+      "High": 2,
+      "Medium": 17,
+      "Low": 4,
+      "Info": 5
+    },
+    "securityScore": 0,
+    "grade": "F"
+  },
+  "log": [
+    "[WAPT] Initializing Passive Security Scan for: http://localhost:3000",
+    "[WAPT] Running checkSecurityHeaders...",
+    "[WAPT] Running checkHttpMethods...",
+    "[WAPT] Running checkSslTls...",
+    "[WAPT] Running checkDirectoryEnumeration...",
+    "[WAPT] Running checkXss...",
+    "[WAPT] Running checkSqlInjection...",
+    "[WAPT] Running checkOpenRedirect...",
+    "[WAPT] Running checkCors...",
+    "[WAPT] Running checkCookieSecurity...",
+    "[WAPT] Running checkServerBanner...",
+    "[WAPT] Passive Security Scan completed in 263ms."
+  ]
+}

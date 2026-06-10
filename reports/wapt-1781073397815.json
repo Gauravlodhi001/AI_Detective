@@ -1,0 +1,288 @@
+{
+  "reportId": "wapt-1781073397815",
+  "type": "wapt",
+  "targetUrl": "http://demo.testfire.net",
+  "scanTime": 1781073397815,
+  "scanDurationMs": 9059,
+  "checksPerformed": 10,
+  "findings": [
+    {
+      "severity": "High",
+      "category": "Security Headers",
+      "title": "Missing Content-Security-Policy",
+      "description": "The Content-Security-Policy (CSP) header is missing, exposing the application to Cross-Site Scripting (XSS) and clickjacking attacks.",
+      "evidence": "Header content-security-policy is absent",
+      "recommendation": "Implement a strict Content-Security-Policy header."
+    },
+    {
+      "severity": "Medium",
+      "category": "Security Headers",
+      "title": "Missing Strict-Transport-Security Header",
+      "description": "The Strict-Transport-Security (HSTS) header is missing, allowing connections over insecure HTTP.",
+      "evidence": "Header strict-transport-security is absent",
+      "recommendation": "Enable HSTS by adding the Strict-Transport-Security header."
+    },
+    {
+      "severity": "Medium",
+      "category": "Security Headers",
+      "title": "Missing X-Frame-Options Header",
+      "description": "The X-Frame-Options header is missing, rendering the application vulnerable to Clickjacking attacks.",
+      "evidence": "Header x-frame-options is absent",
+      "recommendation": "Configure X-Frame-Options to DENY or SAMEORIGIN."
+    },
+    {
+      "severity": "Low",
+      "category": "Security Headers",
+      "title": "Missing X-Content-Type-Options Header",
+      "description": "The X-Content-Type-Options header is missing, allowing browsers to MIME-sniff response content types.",
+      "evidence": "Header x-content-type-options is absent",
+      "recommendation": "Set the X-Content-Type-Options header to nosniff."
+    },
+    {
+      "severity": "Low",
+      "category": "Security Headers",
+      "title": "Missing Referrer-Policy Header",
+      "description": "The Referrer-Policy header is missing, which could leak sensitive information in referrer URLs to third parties.",
+      "evidence": "Header referrer-policy is absent",
+      "recommendation": "Add Referrer-Policy: no-referrer-when-downgrade or strict-origin-when-cross-origin."
+    },
+    {
+      "severity": "Low",
+      "category": "Security Headers",
+      "title": "Missing Permissions-Policy Header",
+      "description": "The Permissions-Policy header is missing, which controls browser features and APIs available to the page.",
+      "evidence": "Header permissions-policy is absent",
+      "recommendation": "Implement a Permissions-Policy header."
+    },
+    {
+      "severity": "High",
+      "category": "HTTP Methods",
+      "title": "Insecure HTTP Method Enabled: PUT",
+      "description": "The web server accepts the PUT method on the root URL, which can be misused by attackers or indicates improper method access controls.",
+      "evidence": "Method: PUT | Response Status: 200",
+      "recommendation": "Disable the PUT HTTP method on the web server if not strictly required."
+    },
+    {
+      "severity": "High",
+      "category": "HTTP Methods",
+      "title": "Insecure HTTP Method Enabled: DELETE",
+      "description": "The web server accepts the DELETE method on the root URL, which can be misused by attackers or indicates improper method access controls.",
+      "evidence": "Method: DELETE | Response Status: 200",
+      "recommendation": "Disable the DELETE HTTP method on the web server if not strictly required."
+    },
+    {
+      "severity": "High",
+      "category": "HTTP Methods",
+      "title": "Insecure HTTP Method Enabled: PATCH",
+      "description": "The web server accepts the PATCH method on the root URL, which can be misused by attackers or indicates improper method access controls.",
+      "evidence": "Method: PATCH | Response Status: 200",
+      "recommendation": "Disable the PATCH HTTP method on the web server if not strictly required."
+    },
+    {
+      "severity": "High",
+      "category": "SSL/TLS",
+      "title": "Missing HTTPS Encryption",
+      "description": "The target application is hosted over HTTP. Traffic is transmitted in plain text, making it vulnerable to sniffing and man-in-the-middle (MITM) attacks.",
+      "evidence": "Protocol: HTTP | URL: http://demo.testfire.net",
+      "recommendation": "Enable SSL/TLS and redirect all traffic to HTTPS."
+    },
+    {
+      "severity": "Medium",
+      "category": "Cookie Security",
+      "title": "Cookie Missing Secure Flag: JSESSIONID",
+      "description": "The cookie \"JSESSIONID\" is missing the Secure flag, allowing the browser to send it over unencrypted HTTP channels.",
+      "evidence": "Set-Cookie: JSESSIONID=9BE308B13E2B4B48BE4FDC5CB395A8C0; Path=/; HttpOnly",
+      "recommendation": "Add the 'Secure' flag to ensure the cookie is only transmitted over HTTPS connection protocols."
+    },
+    {
+      "severity": "Medium",
+      "category": "Cookie Security",
+      "title": "Cookie Missing SameSite Flag: JSESSIONID",
+      "description": "The cookie \"JSESSIONID\" is missing the SameSite flag, rendering users vulnerable to Cross-Site Request Forgery (CSRF) exploits.",
+      "evidence": "Set-Cookie: JSESSIONID=9BE308B13E2B4B48BE4FDC5CB395A8C0; Path=/; HttpOnly",
+      "recommendation": "Set SameSite=Lax or SameSite=Strict on the cookie configuration parameters."
+    },
+    {
+      "severity": "Medium",
+      "category": "Server Banner Leakage",
+      "title": "Server Banner Disclosure: Apache-Coyote/1.1",
+      "description": "The web server discloses its software name and specific version number. This aids attackers in searching for matching public CVE vulnerability exploits.",
+      "evidence": "Server Header: Apache-Coyote/1.1",
+      "recommendation": "Configure the web server to disable or mask the Server response header."
+    }
+  ],
+  "allFindings": [
+    {
+      "severity": "High",
+      "category": "Security Headers",
+      "title": "Missing Content-Security-Policy",
+      "description": "The Content-Security-Policy (CSP) header is missing, exposing the application to Cross-Site Scripting (XSS) and clickjacking attacks.",
+      "evidence": "Header content-security-policy is absent",
+      "recommendation": "Implement a strict Content-Security-Policy header."
+    },
+    {
+      "severity": "Medium",
+      "category": "Security Headers",
+      "title": "Missing Strict-Transport-Security Header",
+      "description": "The Strict-Transport-Security (HSTS) header is missing, allowing connections over insecure HTTP.",
+      "evidence": "Header strict-transport-security is absent",
+      "recommendation": "Enable HSTS by adding the Strict-Transport-Security header."
+    },
+    {
+      "severity": "Medium",
+      "category": "Security Headers",
+      "title": "Missing X-Frame-Options Header",
+      "description": "The X-Frame-Options header is missing, rendering the application vulnerable to Clickjacking attacks.",
+      "evidence": "Header x-frame-options is absent",
+      "recommendation": "Configure X-Frame-Options to DENY or SAMEORIGIN."
+    },
+    {
+      "severity": "Low",
+      "category": "Security Headers",
+      "title": "Missing X-Content-Type-Options Header",
+      "description": "The X-Content-Type-Options header is missing, allowing browsers to MIME-sniff response content types.",
+      "evidence": "Header x-content-type-options is absent",
+      "recommendation": "Set the X-Content-Type-Options header to nosniff."
+    },
+    {
+      "severity": "Low",
+      "category": "Security Headers",
+      "title": "Missing Referrer-Policy Header",
+      "description": "The Referrer-Policy header is missing, which could leak sensitive information in referrer URLs to third parties.",
+      "evidence": "Header referrer-policy is absent",
+      "recommendation": "Add Referrer-Policy: no-referrer-when-downgrade or strict-origin-when-cross-origin."
+    },
+    {
+      "severity": "Low",
+      "category": "Security Headers",
+      "title": "Missing Permissions-Policy Header",
+      "description": "The Permissions-Policy header is missing, which controls browser features and APIs available to the page.",
+      "evidence": "Header permissions-policy is absent",
+      "recommendation": "Implement a Permissions-Policy header."
+    },
+    {
+      "severity": "High",
+      "category": "HTTP Methods",
+      "title": "Insecure HTTP Method Enabled: PUT",
+      "description": "The web server accepts the PUT method on the root URL, which can be misused by attackers or indicates improper method access controls.",
+      "evidence": "Method: PUT | Response Status: 200",
+      "recommendation": "Disable the PUT HTTP method on the web server if not strictly required."
+    },
+    {
+      "severity": "High",
+      "category": "HTTP Methods",
+      "title": "Insecure HTTP Method Enabled: DELETE",
+      "description": "The web server accepts the DELETE method on the root URL, which can be misused by attackers or indicates improper method access controls.",
+      "evidence": "Method: DELETE | Response Status: 200",
+      "recommendation": "Disable the DELETE HTTP method on the web server if not strictly required."
+    },
+    {
+      "severity": "High",
+      "category": "HTTP Methods",
+      "title": "Insecure HTTP Method Enabled: PATCH",
+      "description": "The web server accepts the PATCH method on the root URL, which can be misused by attackers or indicates improper method access controls.",
+      "evidence": "Method: PATCH | Response Status: 200",
+      "recommendation": "Disable the PATCH HTTP method on the web server if not strictly required."
+    },
+    {
+      "severity": "High",
+      "category": "SSL/TLS",
+      "title": "Missing HTTPS Encryption",
+      "description": "The target application is hosted over HTTP. Traffic is transmitted in plain text, making it vulnerable to sniffing and man-in-the-middle (MITM) attacks.",
+      "evidence": "Protocol: HTTP | URL: http://demo.testfire.net",
+      "recommendation": "Enable SSL/TLS and redirect all traffic to HTTPS."
+    },
+    {
+      "severity": "Info",
+      "category": "Directory Enumeration",
+      "title": "Sensitive Directories Protected",
+      "description": "None of the tested paths returned 200 or 403 status codes.",
+      "evidence": "Tested 24 sensitive paths, all returned 404/non-responsive.",
+      "recommendation": "Maintain strict directory indexing controls."
+    },
+    {
+      "severity": "Info",
+      "category": "Cross-Site Scripting (XSS)",
+      "title": "Reflected XSS Checks Passed",
+      "description": "No unescaped reflection of scripting payloads was detected in the tested input fields.",
+      "evidence": "Probed parameters q, search, name, input with standard XSS script alert.",
+      "recommendation": "Ensure strict contextual output escaping is maintained."
+    },
+    {
+      "severity": "Info",
+      "category": "SQL Injection",
+      "title": "SQL Injection Checks Passed",
+      "description": "No database query errors or SQL syntax leaks were detected in response to dynamic probes.",
+      "evidence": "Probed parameters id, user, username, query, q, search, product with 4 SQL injection sequences.",
+      "recommendation": "Continue enforcing SQL parameterization across all query operations."
+    },
+    {
+      "severity": "Info",
+      "category": "Open Redirect",
+      "title": "Open Redirect Checks Passed",
+      "description": "No arbitrary redirection to external evil domains was detected during parameters probing.",
+      "evidence": "Tested 8 typical redirect parameters with external domain payload.",
+      "recommendation": "Maintain local redirect verification checks."
+    },
+    {
+      "severity": "Info",
+      "category": "CORS Configuration",
+      "title": "CORS Security Check Passed",
+      "description": "No wildcard ACAO, origin echoing, or credentials leakage was detected.",
+      "evidence": "Tested normal request and requests with Origin header overrides.",
+      "recommendation": "Retain restrictive CORS configuration parameters."
+    },
+    {
+      "severity": "Medium",
+      "category": "Cookie Security",
+      "title": "Cookie Missing Secure Flag: JSESSIONID",
+      "description": "The cookie \"JSESSIONID\" is missing the Secure flag, allowing the browser to send it over unencrypted HTTP channels.",
+      "evidence": "Set-Cookie: JSESSIONID=9BE308B13E2B4B48BE4FDC5CB395A8C0; Path=/; HttpOnly",
+      "recommendation": "Add the 'Secure' flag to ensure the cookie is only transmitted over HTTPS connection protocols."
+    },
+    {
+      "severity": "Medium",
+      "category": "Cookie Security",
+      "title": "Cookie Missing SameSite Flag: JSESSIONID",
+      "description": "The cookie \"JSESSIONID\" is missing the SameSite flag, rendering users vulnerable to Cross-Site Request Forgery (CSRF) exploits.",
+      "evidence": "Set-Cookie: JSESSIONID=9BE308B13E2B4B48BE4FDC5CB395A8C0; Path=/; HttpOnly",
+      "recommendation": "Set SameSite=Lax or SameSite=Strict on the cookie configuration parameters."
+    },
+    {
+      "severity": "Medium",
+      "category": "Server Banner Leakage",
+      "title": "Server Banner Disclosure: Apache-Coyote/1.1",
+      "description": "The web server discloses its software name and specific version number. This aids attackers in searching for matching public CVE vulnerability exploits.",
+      "evidence": "Server Header: Apache-Coyote/1.1",
+      "recommendation": "Configure the web server to disable or mask the Server response header."
+    }
+  ],
+  "metrics": {
+    "totalFindings": 13,
+    "severityCounts": {
+      "Critical": 0,
+      "High": 5,
+      "Medium": 5,
+      "Low": 3,
+      "Info": 5
+    },
+    "securityScore": 19,
+    "grade": "F"
+  },
+  "log": [
+    "[WAPT] Initializing Passive Security Scan for: http://demo.testfire.net",
+    "[WAPT] Target is HTTP. Checking for HTTPS redirection support...",
+    "[WAPT] No HTTPS redirection detected. Continuing scan over plain HTTP.",
+    "[WAPT] Running checkSecurityHeaders...",
+    "[WAPT] Running checkHttpMethods...",
+    "[WAPT] Running checkSslTls...",
+    "[WAPT] Running checkDirectoryEnumeration...",
+    "[WAPT] Running checkXss...",
+    "[WAPT] Running checkSqlInjection...",
+    "[WAPT] Running checkOpenRedirect...",
+    "[WAPT] Running checkCors...",
+    "[WAPT] Running checkCookieSecurity...",
+    "[WAPT] Running checkServerBanner...",
+    "[WAPT] Passive Security Scan completed in 9059ms."
+  ]
+}

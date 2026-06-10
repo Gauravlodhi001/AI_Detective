@@ -32,11 +32,13 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 const scanRouter = require('./routes/scan');
 const reportRouter = require('./routes/report');
 const settingsRouter = require('./routes/settings');
+const waptRouter = require('./routes/wapt');
 
 // Mount API Endpoints
 app.use('/api/scan', scanRouter);
 app.use('/api/reports', reportRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/wapt', waptRouter);
 
 // Fallback: serve frontend index.html for undefined routes
 app.get('*', (req, res) => {

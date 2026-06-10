@@ -52,6 +52,7 @@ function switchTab(tabId) {
   else if (tabId === 'reports') pageTitle.textContent = 'Saved Reports Catalog';
   else if (tabId === 'settings') pageTitle.textContent = 'Settings & Diagnostics';
   else if (tabId === 'report-viewer') pageTitle.textContent = 'Audit Analysis Report';
+  else if (tabId === 'wapt') pageTitle.textContent = 'WAPT Scanner Hub';
 
   // Load specific tab data
   if (tabId === 'reports') {
@@ -1159,4 +1160,190 @@ function renderMarkdown(mdStr) {
   }).join('\n');
 
   return html;
+}
+
+// ==========================================================================
+// WAPT Feature Logic
+// ==========================================================================
+
+function waptLog(msg) {
+  const c = document.getElementById('wapt-console-logs');
+  if (!c) return;
+  const line = document.createElement('div');
+  line.className = 'console-line';
+  line.textContent = msg;
+  c.appendChild(line);
+  c.scrollTop = c.scrollHeight;
+}
+
+function clearWaptConsole() {
+  const c = document.getElementById('wapt-console-logs');
+  if (c) c.innerHTML = '<div class="console-line">[CLEARED]</div>';
+}
+
+function escW(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function handleWaptScan() {
+  const targetUrl = (document.getElementById('wapt-url-input')?.value || '').trim();
+  if (!targetUrl) { waptLog('[ERROR] Please enter a target URL.'); return; }
+  const btn = document.getElementById('wapt-scan-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Scanning…';
+  clearWaptConsole();
+  waptLog(`[WAPT] Target: ${targetUrl}`);
+  waptLog('[WAPT] Running 10 security checks — this may take 30-60 seconds…');
+  document.getElementById('wapt-results-placeholder').style.display = 'flex';
+  document.getElementById('wapt-results-panel').style.display = 'none';
+  try {
+    const res = await fetch('/api/wapt/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetUrl })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message || 'Scan failed');
+    (data.result?.log || []).forEach(l => waptLog(l));
+    waptLog(`[DONE] Score: ${data.result.metrics.securityScore}/100  Grade: ${data.result.metrics.grade}`);
+    renderWaptResults(data.result);
+  } catch (err) {
+    waptLog(`[ERROR] ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-play"></i> Start WAPT Scan';
+  }
+}
+
+function renderWaptResults(result) {
+  document.getElementById('wapt-results-placeholder').style.display = 'none';
+  document.getElementById('wapt-results-panel').style.display = 'block';
+  const m = result.metrics, c = m.severityCounts;
+  
+  // Format target URL and indicators
+  document.getElementById('wapt-score-section').innerHTML = `
+    <div class="wapt-score-card-layout">
+      <!-- Grade & Posture Score Dial -->
+      <div class="wapt-metric-dial">
+        <div class="wapt-grade-circle wapt-grade-${m.grade}">${m.grade}</div>
+        <div class="wapt-metric-meta">
+          <div class="wapt-metric-label">Security Posture</div>
+          <div class="wapt-metric-value">${m.securityScore}/100</div>
+        </div>
+      </div>
+
+      <!-- Confidence Score Dial -->
+      <div class="wapt-metric-dial">
+        <div class="wapt-metric-circle confidence-circle">${m.confidenceScore}%</div>
+        <div class="wapt-metric-meta">
+          <div class="wapt-metric-label">Scanner Confidence</div>
+          <div class="wapt-metric-value">${m.confidenceScore >= 70 ? 'High' : m.confidenceScore >= 40 ? 'Medium' : 'Low'}</div>
+        </div>
+      </div>
+
+      <!-- Risk Score Dial -->
+      <div class="wapt-metric-dial">
+        <div class="wapt-metric-circle risk-circle risk-${m.riskScore > 70 ? 'critical' : m.riskScore > 40 ? 'medium' : 'low'}">${m.riskScore}/100</div>
+        <div class="wapt-metric-meta">
+          <div class="wapt-metric-label">Threat Risk Index</div>
+          <div class="wapt-metric-value">${m.riskScore > 70 ? 'Critical' : m.riskScore > 40 ? 'Medium' : 'Low'} Risk</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="wapt-target-url-row mt-15">
+      <div class="wapt-url-text" style="font-family: monospace; font-size: 0.8rem; word-break: break-all;">${escW(result.targetUrl)}</div>
+      <div class="wapt-severity-pills mt-10" style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
+        ${c.Critical ? `<span class="wapt-sev-pill Critical">🔴 Critical: ${c.Critical}</span>` : ''}
+        ${c.High     ? `<span class="wapt-sev-pill High">🟠 High: ${c.High}</span>` : ''}
+        ${c.Medium   ? `<span class="wapt-sev-pill Medium">🟡 Medium: ${c.Medium}</span>` : ''}
+        ${c.Low      ? `<span class="wapt-sev-pill Low">🔵 Low: ${c.Low}</span>` : ''}
+        <span style="font-size:.72rem;color:var(--text-muted);margin-left:auto;">${m.totalFindings} finding(s)</span>
+      </div>
+    </div>`;
+
+  const container = document.getElementById('wapt-findings-list');
+  if (!result.findings?.length) {
+    container.innerHTML = '<p style="color:var(--text-muted);font-size:.85rem;padding:20px 0;">No issues found.</p>';
+    return;
+  }
+
+  const order = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+  const sorted = [...result.findings].sort((a, b) => (order[a.severity] ?? 9) - (order[b.severity] ?? 9));
+
+  container.innerHTML = sorted.map((f, index) => {
+    const uniqueId = `finding-${index}`;
+    return `
+      <div class="wapt-finding-card">
+        <div class="wapt-finding-header" onclick="toggleWaptFinding(this)">
+          <span class="wapt-sev-badge ${escW(f.severity)}">${escW(f.severity)}</span>
+          <span class="wapt-finding-title">${escW(f.title)}</span>
+          <span class="wapt-finding-category-tag">${escW(f.category)}</span>
+          <i class="fa-solid fa-chevron-down" style="margin-left:.5rem;font-size:.7rem;color:var(--text-muted);transition:transform .2s;"></i>
+        </div>
+        
+        <div class="wapt-finding-body" style="display:none;">
+          <!-- Accordion Tabs -->
+          <div class="wapt-tabs-nav">
+            <button class="wapt-tab-btn active" onclick="switchWaptTab(event, '${uniqueId}-overview')">Overview</button>
+            <button class="wapt-tab-btn" onclick="switchWaptTab(event, '${uniqueId}-evidence')">Evidence (HTTP)</button>
+            <button class="wapt-tab-btn" onclick="switchWaptTab(event, '${uniqueId}-remediation')">Remediation</button>
+          </div>
+
+          <!-- Tab: Overview -->
+          <div class="wapt-tab-content active" id="${uniqueId}-overview">
+            <p style="font-size:.82rem;line-height:1.5;color:var(--text-primary);">${escW(f.description)}</p>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem; margin-top:0.75rem; font-size:0.74rem; background:rgba(255,255,255,0.02); padding:0.5rem 0.75rem; border-radius:6px; border:1px solid var(--border-color);">
+              <div><strong>Confidence Rating:</strong> <span class="badge-conf-${(f.confidence || 'Medium').toLowerCase()}">${escW(f.confidence || 'Medium')} (${f.confidenceScore || 70}%)</span></div>
+              <div><strong>Detection Logic:</strong> <code>${escW(f.detectionLogic || 'Signature Match')}</code></div>
+            </div>
+            <div class="wapt-field-label mt-10">Analysis Reasoning</div>
+            <div class="wapt-reasoning-box">${escW(f.reasoning || 'Standard compliance evaluation.')}</div>
+          </div>
+
+          <!-- Tab: Evidence -->
+          <div class="wapt-tab-content" id="${uniqueId}-evidence">
+            <div class="wapt-field-label">Raw HTTP Request</div>
+            <pre class="wapt-http-box">${escW(f.rawRequest || 'No request log available.')}</pre>
+            <div class="wapt-field-label mt-10">Raw HTTP Response</div>
+            <pre class="wapt-http-box">${escW(f.rawResponse || 'No response log available.')}</pre>
+          </div>
+
+          <!-- Tab: Remediation -->
+          <div class="wapt-tab-content" id="${uniqueId}-remediation">
+            <div class="wapt-field-label">Suggested Remediation</div>
+            <div class="wapt-rec">${escW(f.remediation || 'Maintain standard configurations.')}</div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function toggleWaptFinding(header) {
+  const body = header.nextElementSibling;
+  const icon = header.querySelector('.fa-chevron-down');
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  if (icon) icon.style.transform = isOpen ? '' : 'rotate(180deg)';
+}
+
+function switchWaptTab(event, targetTabId) {
+  event.stopPropagation(); // Stop click from bubbling and collapsing the accordion
+  const clickedBtn = event.currentTarget;
+  const nav = clickedBtn.parentElement;
+  const body = nav.parentElement;
+
+  // Toggle active button
+  nav.querySelectorAll('.wapt-tab-btn').forEach(btn => btn.classList.remove('active'));
+  clickedBtn.classList.add('active');
+
+  // Toggle active tab content
+  body.querySelectorAll('.wapt-tab-content').forEach(content => {
+    if (content.id === targetTabId) {
+      content.style.display = 'block';
+    } else {
+      content.style.display = 'none';
+    }
+  });
 }

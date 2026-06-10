@@ -51,6 +51,10 @@
           <i class="fa-solid fa-sliders"></i>
           <span>Settings</span>
         </button>
+        <button id="nav-btn-wapt" class="nav-item" onclick="switchTab('wapt')">
+          <i class="fa-solid fa-crosshairs"></i>
+          <span>WAPT</span>
+        </button>
       </nav>
       
       <div class="sidebar-footer">
@@ -514,6 +518,90 @@
               <div class="engine-desc">
                 <h3>Composition Analysis (SCA)</h3>
                 <p>Reads manifest descriptors mapping outdated library versions directly to MITRE CWE / CVE data.</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- TAB: WAPT (Web Application Penetration Testing Hub) -->
+      <section id="tab-wapt" class="tab-pane">
+        <div class="wapt-hub-grid">
+          
+          <!-- Left Column: Controls & Console -->
+          <div class="wapt-controls-container">
+            <div class="content-card">
+              <h2>WAPT Configuration Scanner</h2>
+              <p class="panel-helper-text mt-5">Passive security configuration audit. Inspects security headers, cookie flags, TLS certificates, and banner disclosures.</p>
+              
+              <div class="form-group mt-15">
+                <label for="wapt-url-input">Target Web Application URL</label>
+                <input type="url" id="wapt-url-input" placeholder="https://example.com" required>
+              </div>
+
+              <div class="form-group mt-15">
+                <label>Active Security Checks</label>
+                <div class="wapt-check-pills mt-5">
+                  <span class="wapt-pill"><i class="fa-solid fa-shield-halved"></i> Security Headers</span>
+                  <span class="wapt-pill"><i class="fa-solid fa-list-check"></i> HTTP Methods</span>
+                  <span class="wapt-pill"><i class="fa-solid fa-lock"></i> SSL/TLS Certs</span>
+                  <span class="wapt-pill"><i class="fa-solid fa-folder-tree"></i> Sensitive Paths</span>
+                  <span class="wapt-pill"><i class="fa-solid fa-code"></i> Reflected XSS</span>
+                  <span class="wapt-pill"><i class="fa-solid fa-database"></i> SQL Injection</span>
+                  <span class="wapt-pill"><i class="fa-solid fa-right-to-bracket"></i> Open Redirects</span>
+                  <span class="wapt-pill"><i class="fa-solid fa-network-wired"></i> CORS Policy</span>
+                  <span class="wapt-pill"><i class="fa-solid fa-cookie"></i> Cookie Security</span>
+                  <span class="wapt-pill"><i class="fa-solid fa-bullhorn"></i> Server Banners</span>
+                </div>
+              </div>
+
+              <div class="disclaimer-box mt-15" style="padding:10px; background:rgba(239,68,68,0.05); border:1px solid rgba(239,68,68,0.15); border-radius:6px; font-size:11.5px; color:var(--color-critical);">
+                <i class="fa-solid fa-triangle-exclamation"></i> <strong>Disclaimer:</strong> Ensure you are authorized to run security checks against the target host before initiating the scan.
+              </div>
+
+              <button class="btn btn-primary btn-block btn-lg mt-20" id="wapt-scan-btn" onclick="handleWaptScan()">
+                <i class="fa-solid fa-play"></i> Start WAPT Scan
+              </button>
+            </div>
+
+            <!-- Scanner Console Log -->
+            <div class="console-card mt-20">
+              <div class="console-header">
+                <div class="console-dots">
+                  <span class="dot red"></span>
+                  <span class="dot yellow"></span>
+                  <span class="dot green"></span>
+                </div>
+                <span class="console-title">WAPT Scan Feed</span>
+                <button class="btn btn-secondary btn-sm" onclick="clearWaptConsole()" style="margin-left:auto; padding:2px 8px; font-size:11px;">Clear</button>
+              </div>
+              <div class="console-body" id="wapt-console-logs" style="height:200px;">
+                <div class="console-line">[READY] System idle. Enter target URL to begin security diagnostic.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Results -->
+          <div class="wapt-results-container">
+            <!-- Placeholder -->
+            <div class="content-card" id="wapt-results-placeholder" style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:60px 20px; text-align:center;">
+              <i class="fa-solid fa-crosshairs" style="font-size:48px; color:var(--text-muted); opacity:0.3; margin-bottom:15px;"></i>
+              <h3>Scan Results Pending</h3>
+              <p style="color:var(--text-muted); font-size:13.5px; max-width:400px; margin-top:5px;">Scan results will populate here. Enter target parameters on the left to begin analysis.</p>
+            </div>
+
+            <!-- Results Panel -->
+            <div class="content-card" id="wapt-results-panel" style="display:none;">
+              <div class="wapt-score-card pb-15" id="wapt-score-section" style="border-bottom:1px solid var(--border-color);">
+                <!-- Populated via JavaScript -->
+              </div>
+
+              <div class="wapt-findings-section mt-25">
+                <h3 style="margin-bottom:15px;">Identified Vulnerabilities</h3>
+                <div id="wapt-findings-list">
+                  <!-- Populated via JavaScript -->
+                </div>
               </div>
             </div>
           </div>
