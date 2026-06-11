@@ -2,11 +2,63 @@ const http = require('http');
 const https = require('https');
 const { URL } = require('url');
 
-/**
- * Promise-wrapped request utility using Node built-in modules.
- * Returns response metadata, body, raw request, and raw response. Never throws.
- */
+const { StatefulSessionManager } = require('../utils/statefulSession');
+const { SessionBridge } = require('../utils/sessionBridge');
+const { GraphQLParser } = require('../parsers/graphql_parser');
+const { JSMiner } = require('../utils/jsMiner');
+const { ParameterMiner } = require('../utils/parameterMiner');
+const { IdorVerifier } = require('./idor_verifier');
+const { RbacAuditor } = require('./rbac_auditor');
+const { RecursiveCrawler } = require('./crawler');
+
 function request(urlStr, options = {}) {
+  return new Promise(async (resolve) => {
+    const sessionManager = options.headers ? options.headers.__sessionManager : null;
+    
+    // Clean headers for the actual HTTP call
+    const cleanOptions = { ...options };
+    cleanOptions.headers = { ...options.headers };
+    if (cleanOptions.headers) {
+      delete cleanOptions.headers.__sessionManager;
+    }
+
+    let res = await rawRequest(urlStr, cleanOptions);
+
+    if (sessionManager) {
+      const isUnauthorized = res.status === 401 || res.status === 403;
+      let isRedirectToLogin = false;
+      if (res.status === 302 || res.status === 301 || res.status === 307) {
+        const loc = res.headers['location'] || '';
+        if (loc.includes('/login') || loc.includes('/signin') || loc.includes('/auth')) {
+          isRedirectToLogin = true;
+        }
+      }
+
+      if (isUnauthorized || isRedirectToLogin) {
+        try {
+          const parsedUrl = new URL(urlStr);
+          const baseUrl = `${parsedUrl.protocol}//${parsedUrl.host}`;
+          
+          const handled = await sessionManager.handleAccessDenied(rawRequest, baseUrl);
+          if (handled && sessionManager.state === 'AUTHENTICATED') {
+            const freshHeaders = { ...sessionManager.getHeaders(), ...options.headers };
+            delete freshHeaders.__sessionManager;
+            cleanOptions.headers = freshHeaders;
+            
+            res = await rawRequest(urlStr, cleanOptions);
+          }
+        } catch (e) {
+          // Ignore and use original response
+        }
+      }
+    }
+
+    resolve(res);
+  });
+}
+
+function rawRequest(urlStr, options = {}) {
+
   return new Promise((resolve) => {
     let resolved = false;
     let req = null;
@@ -2220,12 +2272,243 @@ async function runWaptScan(targetUrl, authConfig = null) {
   const resolvedUrl = redirectInfo.finalUrl;
   const redirectedToHttps = redirectInfo.redirectedToHttps;
 
-  // Initialize login session and retrieve authorization headers if configured
-  const authHeaders = await loginAndGetHeaders(resolvedUrl, authConfig, log);
+  // Bridge-map legacy single authConfig to multi-role config for backward compatibility
+  let multiAuthConfig = authConfig;
+  if (authConfig && !authConfig.userA && !authConfig.admin) {
+    log.push('[WAPT] Mapping legacy single credentials config to multi-role structure.');
+    const singleAuth = authConfig;
+    multiAuthConfig = {
+      guest: { authType: 'none' },
+      userA: singleAuth,
+      userB: { authType: 'none' },
+      manager: { authType: 'none' },
+      admin: singleAuth
+    };
+  }
 
-  const allFindings = [];
+  // 1. Initialize role session managers
+  const sessions = {
+    guest: new StatefulSessionManager('guest', { authType: 'none' }, log),
+    userA: new StatefulSessionManager('userA', multiAuthConfig?.userA || { authType: 'none' }, log),
+    userB: new StatefulSessionManager('userB', multiAuthConfig?.userB || { authType: 'none' }, log),
+    manager: new StatefulSessionManager('manager', multiAuthConfig?.manager || { authType: 'none' }, log),
+    admin: new StatefulSessionManager('admin', multiAuthConfig?.admin || { authType: 'none' }, log)
+  };
 
-  // Run checks concurrently on the resolved final URL
+  // 2. Perform initial logins for all configured sessions
+  for (const [roleName, session] of Object.entries(sessions)) {
+    if (session.authConfig.authType !== 'none') {
+      log.push(`[WAPT] Initializing session for role: ${roleName}`);
+      await session.performLogin(rawRequest, resolvedUrl);
+    }
+  }
+
+  // 3. Setup Session Sync Bridge for userA (primary crawler session)
+  const sessionBridge = new SessionBridge(sessions.userA, log);
+
+  // 4. Run Crawler to map endpoints (uses browser-sync crawler, fallback to http spider)
+  const crawler = new RecursiveCrawler(log, sessionBridge);
+  const crawledEndpoints = await crawler.crawl(resolvedUrl, rawRequest, 2, true);
+  
+  // Merge endpoints map
+  const endpointsRegistry = new Map(); // Map<string, { path, fullUrl, method }>
+  crawledEndpoints.forEach(e => {
+    const key = `${e.method}:${e.path}`;
+    endpointsRegistry.set(key, e);
+  });
+
+  // 5. Discover Swagger/OpenAPI specifications
+  const swaggerPaths = ['/swagger.json', '/openapi.json', '/api-docs', '/api/swagger.json', '/api/openapi.json'];
+  for (const sPath of swaggerPaths) {
+    const sUrl = resolvedUrl.endsWith('/') ? resolvedUrl.slice(0, -1) + sPath : resolvedUrl + sPath;
+    const sRes = await request(sUrl, { method: 'GET' });
+    if (sRes.status === 200) {
+      log.push(`[WAPT] Discovered Swagger/OpenAPI endpoint: ${sUrl}`);
+      try {
+        const spec = JSON.parse(sRes.body);
+        if (spec.paths) {
+          Object.keys(spec.paths).forEach(p => {
+            const methods = Object.keys(spec.paths[p]);
+            methods.forEach(m => {
+              if (['get', 'post', 'put', 'delete', 'patch'].includes(m.toLowerCase())) {
+                const cleanP = p.replace(/{[^}]+}/g, '1'); // Replace path parameters with dummy value
+                const fullPUrl = resolvedUrl.endsWith('/') ? resolvedUrl.slice(0, -1) + cleanP : resolvedUrl + cleanP;
+                endpointsRegistry.set(`${m.toUpperCase()}:${cleanP}`, {
+                  path: cleanP,
+                  fullUrl: fullPUrl,
+                  method: m.toUpperCase()
+                });
+              }
+            });
+          });
+        }
+      } catch (e) {
+        log.push(`[WAPT] Failed to parse Swagger JSON: ${e.message}`);
+      }
+    }
+  }
+
+  // 6. Discover GraphQL
+  const graphqlPaths = ['/graphql', '/query', '/api/graphql', '/v1/graphql'];
+  const graphqlParser = new GraphQLParser(log);
+  let hasGraphQL = false;
+  for (const gPath of graphqlPaths) {
+    const gUrl = resolvedUrl.endsWith('/') ? resolvedUrl.slice(0, -1) + gPath : resolvedUrl + gPath;
+    // Probe check
+    const gRes = await request(gUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: '{ __typename }' })
+    });
+    
+    if (gRes.status === 200 || gRes.status === 400 || gRes.status === 401 || gRes.status === 403) {
+      log.push(`[WAPT] GraphQL endpoint detected at: ${gUrl}`);
+      hasGraphQL = true;
+      
+      // Attempt Introspection
+      const schema = await graphqlParser.fetchSchema(rawRequest, gUrl, sessions.userA.getHeaders());
+      if (schema) {
+        const operations = graphqlParser.generateTestOperations(schema);
+        operations.forEach(op => {
+          // Register operations as scan targets
+          endpointsRegistry.set(`POST:${gPath}/${op.name}`, {
+            path: `${gPath}/${op.name}`,
+            fullUrl: gUrl,
+            method: 'POST',
+            isGraphQL: true,
+            queryTemplate: op.query
+          });
+        });
+      }
+      break; // Only test first active GraphQL endpoint
+    }
+  }
+
+  // 7. Retrieve initial response to mine JS scripts
+  const initialRes = await request(resolvedUrl, { method: 'GET' });
+  const htmlContent = initialRes.body || '';
+  const initialHeaders = initialRes.headers || {};
+
+  // JS Endpoint Mining
+  const jsMiner = new JSMiner(log);
+  const jsScripts = [];
+  const scriptRegex = /<script[^>]*src=["']([^"']+)["']/gi;
+  let scriptMatch;
+  while ((scriptMatch = scriptRegex.exec(htmlContent)) !== null) {
+    jsScripts.push(scriptMatch[1]);
+  }
+
+  for (const scriptSrc of jsScripts) {
+    try {
+      let scriptUrl = scriptSrc;
+      if (scriptSrc.startsWith('/') && !scriptSrc.startsWith('//')) {
+        scriptUrl = new URL(resolvedUrl).origin + scriptSrc;
+      } else if (!scriptSrc.startsWith('http://') && !scriptSrc.startsWith('https://')) {
+        scriptUrl = new URL(scriptSrc, resolvedUrl).href;
+      }
+      
+      log.push(`[WAPT] Fetching script for endpoint mining: ${scriptUrl}`);
+      const jsRes = await request(scriptUrl, { method: 'GET' });
+      if (jsRes.status === 200 && jsRes.body) {
+        const mined = jsMiner.mineEndpoints(jsRes.body, resolvedUrl);
+        mined.forEach(e => {
+          const key = `${e.method}:${e.path}`;
+          if (!endpointsRegistry.has(key)) {
+            endpointsRegistry.set(key, e);
+          }
+        });
+      }
+    } catch (e) {
+      log.push(`[WAPT] Error mining script ${scriptSrc}: ${e.message}`);
+    }
+  }
+
+  // Convert map to array
+  const endpoints = Array.from(endpointsRegistry.values());
+  log.push(`[WAPT] Discovery completed. Mapped total of ${endpoints.length} active API endpoints.`);
+
+  // 8. Parameter Mining
+  const paramMiner = new ParameterMiner(log);
+  // Mine parameters from crawler HTML bodies
+  crawledEndpoints.forEach(e => {
+    try {
+      const parsed = new URL(e.fullUrl);
+      parsed.searchParams.forEach((val, key) => {
+        paramMiner.register(e.fullUrl, key);
+      });
+    } catch (err) {}
+  });
+
+  // 9. Run RBAC Matrix Audit
+  const rbacAuditor = new RbacAuditor(log);
+  const rbacMatrix = await rbacAuditor.runAudit(endpoints, sessions, rawRequest);
+
+  // 10. Run IDOR Similarity Verifications
+  const idorVerifier = new IdorVerifier(log);
+  const idorFindings = [];
+  
+  const potentialIdorEndpoints = endpoints.filter(e => {
+    const params = paramMiner.getParameters(e.fullUrl);
+    const hasIdParam = params.some(p => ['id', 'user', 'account', 'invoice', 'order', 'role', 'uuid'].includes(p.toLowerCase()));
+    const pathHasParam = e.path.includes(':') || /\/[0-9]+(\/|$)/.test(e.path);
+    return hasIdParam || pathHasParam;
+  });
+
+  for (const endpoint of potentialIdorEndpoints) {
+    log.push(`[WAPT] Evaluating IDOR on: ${endpoint.method} ${endpoint.path}`);
+    
+    const ownerRes = await rawRequest(endpoint.fullUrl, {
+      method: endpoint.method,
+      headers: sessions.userA.getHeaders()
+    });
+
+    if (ownerRes.status >= 200 && ownerRes.status < 300) {
+      const attackerRes = await rawRequest(endpoint.fullUrl, {
+        method: endpoint.method,
+        headers: sessions.userB.getHeaders()
+      });
+
+      const guestRes = await rawRequest(endpoint.fullUrl, {
+        method: endpoint.method,
+        headers: sessions.guest.getHeaders()
+      });
+
+      const verification = idorVerifier.verifyIdor(ownerRes, attackerRes, guestRes, multiAuthConfig?.userA, multiAuthConfig?.userB);
+      
+      if (verification.isVulnerable) {
+        log.push(`[WAPT] IDOR Vulnerability confirmed on: ${endpoint.method} ${endpoint.path}`);
+        idorFindings.push(createFinding({
+          title: 'Broken Object-Level Authorization (IDOR)',
+          observation: `An IDOR vulnerability was validated on the endpoint. An authenticated user (User B) successfully retrieved resource data belonging to another user (User A) without authorization controls.`,
+          evidence: `Endpoint: ${endpoint.method} ${endpoint.path} | Reason: ${verification.reason}`,
+          detectionLogic: `Issue parallel authenticated requests with owner and attacker session tokens and execute Jaccard response-similarity metrics.`,
+          aiAnalysis: `The endpoint does not validate if the authenticated session identity matches the resource identity owner before returning records, exposing data to access leakage.`,
+          falsePositiveAssessment: `Confirm if the resource represents public profile information meant for general access.`,
+          detectionConfidence: 95,
+          riskConfidence: 90,
+          businessImpact: `Complete data confidentiality exposure, enabling unauthorized access to invoice details, user profile credentials, and private customer documents.`,
+          remediation: `Implement robust backend checks validating resource ownership (e.g. comparing req.user.id with resource.ownerId) before sending responses.`,
+          finalClassification: 'Confirmed Vulnerability',
+          finalSeverity: 'High',
+          rawRequest: attackerRes.rawRequest,
+          rawResponse: attackerRes.rawResponse,
+          owasp: 'A01:2021-Broken Access Control',
+          cwe: 'CWE-639',
+          cvss: 'CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N (6.5)',
+          asvs: 'ASVS V4.0.3-4.1.1'
+        }));
+      }
+    }
+  }
+
+  // 11. Run standard checks injecting userA's stateful session headers
+  const authHeaders = {
+    ...sessions.userA.getHeaders(),
+    __sessionManager: sessions.userA
+  };
+
+  const allFindings = [...idorFindings];
+
   const checkLogPairs = [
     { fn: checkSecurityHeaders },
     { fn: checkHttpMethods },
@@ -2258,10 +2541,10 @@ async function runWaptScan(targetUrl, authConfig = null) {
 
   const duration = Date.now() - startTime;
 
+
   // Retrieve security infrastructure signatures from the final response
-  const initialRes = await request(resolvedUrl, { method: 'GET' });
-  const htmlContent = initialRes.body || '';
-  const initialHeaders = initialRes.headers || {};
+  // Variables are already fetched and declared in the outer scope
+
 
   const infrastructure = detectSecurityInfrastructure(initialHeaders);
   if (infrastructure.length > 0) {
@@ -2501,6 +2784,9 @@ async function runWaptScan(targetUrl, authConfig = null) {
     allFindings,
     attackSurface,
     attackPaths,
+    discoveredParameters: paramMiner.exportRegistry(),
+    minedEndpoints: endpoints,
+    rbacMatrix: rbacMatrix,
     metrics: {
       totalFindings: allFindings.length,
       severityCounts: counts,
@@ -2517,3 +2803,4 @@ async function runWaptScan(targetUrl, authConfig = null) {
 module.exports = {
   runWaptScan
 };
+

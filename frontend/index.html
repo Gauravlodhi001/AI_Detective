@@ -544,15 +544,34 @@
               </div>
 
               <!-- Gray Box Auth Configuration -->
+              <!-- Gray Box Auth Configuration -->
               <div class="form-group mt-15">
-                <label for="wapt-auth-type">Authentication Method (Gray Box)</label>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 5px;">
+                  <label style="font-weight:600; font-size: 13px;">Authentication Settings (Gray Box)</label>
+                  <label style="display:inline-flex; align-items:center; gap:5px; font-size:11.5px; cursor:pointer; user-select:none; color: var(--text-color);">
+                    <input type="checkbox" id="wapt-multi-role-toggle" onchange="toggleWaptMultiRole(this.checked)" style="cursor:pointer;"> Enable Multi-Role RBAC Audit
+                  </label>
+                </div>
+
+                <div id="wapt-role-selector-container" style="display:none; margin-bottom:10px; padding: 8px; border: 1px solid var(--border-color); border-radius: 6px; background: rgba(255,255,255,0.02);">
+                  <label for="wapt-configure-role" style="font-size:11px; color:var(--text-muted); display: block; margin-bottom: 4px;">Select role credentials to edit:</label>
+                  <select id="wapt-configure-role" class="form-control" onchange="changeActiveRoleConfig(this.value)" style="width:100%; padding:6px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:6px; color:var(--text-color); font-size:12px;">
+                    <option value="userA">User A (Primary Session)</option>
+                    <option value="userB">User B (Horizontal Access Target)</option>
+                    <option value="manager">Manager (Elevated Privileges)</option>
+                    <option value="admin">Administrator (Full Access)</option>
+                  </select>
+                </div>
+
+                <label for="wapt-auth-type" id="wapt-auth-method-label" style="font-size: 11.5px; margin-top: 5px; display: block;">Auth Method</label>
                 <select id="wapt-auth-type" class="form-control" onchange="toggleWaptAuthFields(this.value)" style="width:100%; padding:8px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:6px; color:var(--text-color);">
-                  <option value="none">None (Anonymous Black Box)</option>
+                  <option value="none">None (Anonymous / Black Box)</option>
                   <option value="cookie">Session Cookie Auth (Form Login)</option>
                   <option value="jwt">JWT Token Auth (Form Login)</option>
                   <option value="header">Static Header Auth (Custom Token)</option>
                 </select>
               </div>
+
 
               <div id="wapt-auth-creds-fields" style="display:none; border:1px dashed var(--border-color); padding:12px; border-radius:6px; margin-top:10px;">
                 <div class="form-group">
@@ -663,11 +682,18 @@
               <!-- AI Correlated Attack Paths -->
               <div id="wapt-paths-section" class="mt-20"></div>
 
-              <!-- OWASP Coverage Summary -->
-              <div id="wapt-owasp-section" class="mt-20" style="display:none;"></div>
+               <!-- OWASP Coverage Summary -->
+               <div id="wapt-owasp-section" class="mt-20" style="display:none;"></div>
 
-              <!-- Scanner Benchmarking Panel -->
-              <div id="wapt-benchmark-section" class="mt-20" style="display:none;"></div>
+               <!-- RBAC Matrix Audit Section -->
+               <div id="wapt-rbac-section" class="mt-20" style="display:none;"></div>
+
+               <!-- Parameter Mining Section -->
+               <div id="wapt-params-section" class="mt-20" style="display:none;"></div>
+
+               <!-- Scanner Benchmarking Panel -->
+               <div id="wapt-benchmark-section" class="mt-20" style="display:none;"></div>
+
 
               <div class="wapt-findings-section mt-25">
                 <h3 style="margin-bottom:15px;">Identified Vulnerabilities & Observations</h3>

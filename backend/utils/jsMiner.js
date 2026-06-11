@@ -8,55 +8,67 @@ class JSMiner {
     const endpoints = [];
     const visited = new Set();
 
-    // Regex to match API paths in JS strings
-    const pathRegex = /(?:["'`])(\/(?:api|v[0-9]|auth|graphql|query|admin|user)[a-zA-Z0-9_\-\/{}\[\]:.@]+)(?:["'`])/g;
+    // Pattern 1: axios.method('/path') or http.post('/path')
+    const clientPattern = /(?:axios|jQuery|get|post|put|delete|patch|req|request|client|http)\.(get|post|put|delete|patch|options|head)\s*\(\s*['"`](\/(?:api|v[0-9]|auth|graphql|query|admin|user)[a-zA-Z0-9_\-\/{}\[\]:.@]+)['"`]/gi;
     
     let match;
-    // Reset regex index
-    pathRegex.lastIndex = 0;
+    clientPattern.lastIndex = 0;
+    while ((match = clientPattern.exec(jsCode)) !== null) {
+      const method = match[1].toUpperCase();
+      const path = match[2];
+      const key = `${method}:${path}`;
+      if (!visited.has(key)) {
+        visited.add(key);
+        endpoints.push({ path, method });
+      }
+    }
 
+    // Pattern 2: fetch('/path', { method: 'POST' }) or similar
+    const pathRegex = /(?:["'`])(\/(?:api|v[0-9]|auth|graphql|query|admin|user)[a-zA-Z0-9_\-\/{}\[\]:.@]+)(?:["'`])/g;
+    pathRegex.lastIndex = 0;
     while ((match = pathRegex.exec(jsCode)) !== null) {
       const path = match[1];
       const matchIndex = match.index;
       
-      // Skip duplicate findings for same path
-      if (visited.has(path)) continue;
-      visited.add(path);
-
-      // Inspect surrounding context (e.g., 100 characters before and after)
-      const start = Math.max(0, matchIndex - 100);
-      const end = Math.min(jsCode.length, matchIndex + path.length + 100);
+      // Look back 40 characters, look forward 40 characters for methods
+      const start = Math.max(0, matchIndex - 40);
+      const end = Math.min(jsCode.length, matchIndex + path.length + 40);
       const context = jsCode.substring(start, end).toLowerCase();
 
       let method = 'GET';
-      
-      // Search for HTTP methods inside context
-      if (context.includes('.post') || /method\s*:\s*['"`]post['"`]/.test(context)) {
+      if (context.includes('post') || /method\s*:\s*['"`]post['"`]/.test(context)) {
         method = 'POST';
-      } else if (context.includes('.delete') || /method\s*:\s*['"`]delete['"`]/.test(context)) {
+      } else if (context.includes('delete') || /method\s*:\s*['"`]delete['"`]/.test(context)) {
         method = 'DELETE';
-      } else if (context.includes('.put') || /method\s*:\s*['"`]put['"`]/.test(context)) {
+      } else if (context.includes('put') || /method\s*:\s*['"`]put['"`]/.test(context)) {
         method = 'PUT';
-      } else if (context.includes('.patch') || /method\s*:\s*['"`]patch['"`]/.test(context)) {
+      } else if (context.includes('patch') || /method\s*:\s*['"`]patch['"`]/.test(context)) {
         method = 'PATCH';
       }
 
-      // Format full URL
-      let fullUrl = path;
-      if (baseUrl) {
-        const base = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-        fullUrl = path.startsWith('/') ? `${base}${path}` : `${base}/${path}`;
+      const key = `${method}:${path}`;
+      if (!visited.has(key)) {
+        visited.add(key);
+        endpoints.push({ path, method });
       }
-
-      endpoints.push({
-        path,
-        fullUrl,
-        method
-      });
     }
 
-    this.log.push(`[JSMiner] Mined ${endpoints.length} endpoints from JavaScript asset.`);
-    return endpoints;
+    // Format full URLs
+    const formatted = endpoints.map(e => {
+      let fullUrl = e.path;
+      if (baseUrl) {
+        const base = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+        fullUrl = e.path.startsWith('/') ? `${base}${e.path}` : `${base}/${e.path}`;
+      }
+      return {
+        path: e.path,
+        fullUrl,
+        method: e.method
+      };
+    });
+
+    this.log.push(`[JSMiner] Mined ${formatted.length} endpoints from JavaScript asset.`);
+    return formatted;
   }
 }
 

@@ -1186,6 +1186,110 @@ function escW(str) {
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// Global memory store for WAPT multi-role configurations
+window.waptRolesConfig = {
+  userA: { authType: 'none', credentials: { loginUrl: '', usernameField: 'email', passwordField: 'password', usernameValue: '', passwordValue: '' }, staticHeaders: {} },
+  userB: { authType: 'none', credentials: { loginUrl: '', usernameField: 'email', passwordField: 'password', usernameValue: '', passwordValue: '' }, staticHeaders: {} },
+  manager: { authType: 'none', credentials: { loginUrl: '', usernameField: 'email', passwordField: 'password', usernameValue: '', passwordValue: '' }, staticHeaders: {} },
+  admin: { authType: 'none', credentials: { loginUrl: '', usernameField: 'email', passwordField: 'password', usernameValue: '', passwordValue: '' }, staticHeaders: {} }
+};
+
+window.waptActiveRole = 'userA'; // Currently selected role to configure in the form
+
+function toggleWaptMultiRole(checked) {
+  const roleSelector = document.getElementById('wapt-role-selector-container');
+  if (roleSelector) {
+    roleSelector.style.display = checked ? 'block' : 'none';
+  }
+  
+  // Update the select dropdown target and active configurations
+  if (checked) {
+    document.getElementById('wapt-configure-role').value = 'userA';
+    window.waptActiveRole = 'userA';
+    loadRoleConfigIntoUI('userA');
+  } else {
+    // Reset selector and load default UI fields
+    const activeAuthType = document.getElementById('wapt-auth-type').value;
+    toggleWaptAuthFields(activeAuthType);
+  }
+}
+
+// Save active form values to the currently selected role config in memory
+function saveActiveRoleConfig() {
+  const role = window.waptActiveRole;
+  if (!window.waptRolesConfig[role]) return;
+
+  const authType = document.getElementById('wapt-auth-type').value;
+  window.waptRolesConfig[role].authType = authType;
+
+  if (authType === 'cookie' || authType === 'jwt') {
+    window.waptRolesConfig[role].credentials = {
+      loginUrl: (document.getElementById('wapt-auth-loginurl')?.value || '').trim(),
+      usernameField: (document.getElementById('wapt-auth-userfield')?.value || 'email').trim(),
+      passwordField: (document.getElementById('wapt-auth-pwdfield')?.value || 'password').trim(),
+      usernameValue: (document.getElementById('wapt-auth-userval')?.value || '').trim(),
+      passwordValue: (document.getElementById('wapt-auth-pwdval')?.value || '').trim()
+    };
+  } else if (authType === 'header') {
+    const rawJson = (document.getElementById('wapt-auth-headersjson')?.value || '').trim();
+    if (rawJson) {
+      try {
+        window.waptRolesConfig[role].staticHeaders = JSON.parse(rawJson);
+      } catch (e) {
+        window.waptRolesConfig[role].staticHeaders = {};
+      }
+    } else {
+      window.waptRolesConfig[role].staticHeaders = {};
+    }
+  } else {
+    window.waptRolesConfig[role].credentials = {};
+    window.waptRolesConfig[role].staticHeaders = {};
+  }
+}
+
+// Load configurations from memory into the active UI input fields
+function loadRoleConfigIntoUI(role) {
+  const config = window.waptRolesConfig[role];
+  if (!config) return;
+
+  // Set auth type and trigger field updates
+  const authTypeSelect = document.getElementById('wapt-auth-type');
+  if (authTypeSelect) {
+    authTypeSelect.value = config.authType;
+    toggleWaptAuthFields(config.authType);
+  }
+
+  // Set credentials fields
+  const creds = config.credentials || {};
+  const loginUrlField = document.getElementById('wapt-auth-loginurl');
+  if (loginUrlField) loginUrlField.value = creds.loginUrl || '';
+
+  const userField = document.getElementById('wapt-auth-userfield');
+  if (userField) userField.value = creds.usernameField || 'email';
+
+  const pwdField = document.getElementById('wapt-auth-pwdfield');
+  if (pwdField) pwdField.value = creds.passwordField || 'password';
+
+  const userValField = document.getElementById('wapt-auth-userval');
+  if (userValField) userValField.value = creds.usernameValue || '';
+
+  const pwdValField = document.getElementById('wapt-auth-pwdval');
+  if (pwdValField) pwdValField.value = creds.passwordValue || '';
+
+  // Set static headers JSON
+  const headersField = document.getElementById('wapt-auth-headersjson');
+  if (headersField) {
+    headersField.value = config.staticHeaders ? JSON.stringify(config.staticHeaders, null, 2) : '';
+  }
+}
+
+// Triggered when selection of Configure Role select changes
+function changeActiveRoleConfig(newRole) {
+  saveActiveRoleConfig();
+  window.waptActiveRole = newRole;
+  loadRoleConfigIntoUI(newRole);
+}
+
 function toggleWaptAuthFields(value) {
   const credsContainer = document.getElementById('wapt-auth-creds-fields');
   const headersContainer = document.getElementById('wapt-auth-headers-fields');
@@ -1202,35 +1306,58 @@ function toggleWaptAuthFields(value) {
   }
 }
 
+
 async function handleWaptScan() {
   const targetUrl = (document.getElementById('wapt-url-input')?.value || '').trim();
   if (!targetUrl) { waptLog('[ERROR] Please enter a target URL.'); return; }
 
   // Extract authConfig parameters
-  const authType = document.getElementById('wapt-auth-type')?.value || 'none';
-  let authConfig = { authType };
+  const isMultiRole = document.getElementById('wapt-multi-role-toggle')?.checked || false;
+  let authConfig = {};
 
-  if (authType === 'cookie' || authType === 'jwt') {
-    authConfig.credentials = {
-      loginUrl: (document.getElementById('wapt-auth-loginurl')?.value || '').trim(),
-      usernameField: (document.getElementById('wapt-auth-userfield')?.value || 'email').trim(),
-      passwordField: (document.getElementById('wapt-auth-pwdfield')?.value || 'password').trim(),
-      usernameValue: (document.getElementById('wapt-auth-userval')?.value || '').trim(),
-      passwordValue: (document.getElementById('wapt-auth-pwdval')?.value || '').trim()
+  if (isMultiRole) {
+    // Save current active role values first
+    saveActiveRoleConfig();
+    authConfig = {
+      guest: { authType: 'none' },
+      userA: window.waptRolesConfig.userA,
+      userB: window.waptRolesConfig.userB,
+      manager: window.waptRolesConfig.manager,
+      admin: window.waptRolesConfig.admin
     };
-  } else if (authType === 'header') {
-    const rawJson = (document.getElementById('wapt-auth-headersjson')?.value || '').trim();
-    if (rawJson) {
-      try {
-        authConfig.staticHeaders = JSON.parse(rawJson);
-      } catch (e) {
-        waptLog('[ERROR] Invalid JSON in Static Headers. Using empty configuration.');
-        authConfig.staticHeaders = {};
+  } else {
+    const authType = document.getElementById('wapt-auth-type')?.value || 'none';
+    let singleConfig = { authType };
+    if (authType === 'cookie' || authType === 'jwt') {
+      singleConfig.credentials = {
+        loginUrl: (document.getElementById('wapt-auth-loginurl')?.value || '').trim(),
+        usernameField: (document.getElementById('wapt-auth-userfield')?.value || 'email').trim(),
+        passwordField: (document.getElementById('wapt-auth-pwdfield')?.value || 'password').trim(),
+        usernameValue: (document.getElementById('wapt-auth-userval')?.value || '').trim(),
+        passwordValue: (document.getElementById('wapt-auth-pwdval')?.value || '').trim()
+      };
+    } else if (authType === 'header') {
+      const rawJson = (document.getElementById('wapt-auth-headersjson')?.value || '').trim();
+      if (rawJson) {
+        try {
+          singleConfig.staticHeaders = JSON.parse(rawJson);
+        } catch (e) {
+          waptLog('[ERROR] Invalid JSON in Static Headers. Using empty configuration.');
+          singleConfig.staticHeaders = {};
+        }
+      } else {
+        singleConfig.staticHeaders = {};
       }
-    } else {
-      authConfig.staticHeaders = {};
     }
+    authConfig = {
+      guest: { authType: 'none' },
+      userA: singleConfig,
+      userB: { authType: 'none' },
+      manager: { authType: 'none' },
+      admin: singleConfig
+    };
   }
+
 
   const btn = document.getElementById('wapt-scan-btn');
   btn.disabled = true;
@@ -1466,8 +1593,104 @@ function renderWaptResults(result) {
     document.getElementById('wapt-owasp-section').style.display = 'none';
   }
 
+  // Render RBAC Matrix Section
+  const rbacContainer = document.getElementById('wapt-rbac-section');
+  if (rbacContainer) {
+    if (result.rbacMatrix && result.rbacMatrix.length > 0) {
+      rbacContainer.style.display = 'block';
+      let rbacHtml = `
+        <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--text-primary);"><i class="fa-solid fa-users-viewfinder" style="margin-right: 6px; color: #10b981;"></i> Role-Based Access Control (RBAC) Matrix</h3>
+        <div style="overflow-x: auto; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 20px;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.74rem; text-align: left; min-width: 600px;">
+            <thead>
+              <tr style="background: rgba(255,255,255,0.04); border-bottom: 1px solid var(--border-color);">
+                <th style="padding: 10px; font-weight: 600; color: var(--text-muted); width: 40%;">API Route</th>
+                <th style="padding: 10px; font-weight: 600; color: var(--text-muted); width: 10%;">Method</th>
+                <th style="padding: 10px; font-weight: 600; color: var(--text-muted); text-align: center; width: 10%;">Guest</th>
+                <th style="padding: 10px; font-weight: 600; color: var(--text-muted); text-align: center; width: 10%;">User A</th>
+                <th style="padding: 10px; font-weight: 600; color: var(--text-muted); text-align: center; width: 10%;">User B</th>
+                <th style="padding: 10px; font-weight: 600; color: var(--text-muted); text-align: center; width: 10%;">Manager</th>
+                <th style="padding: 10px; font-weight: 600; color: var(--text-muted); text-align: center; width: 10%;">Admin</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      const getBadge = (status) => {
+        if (!status) return `<span class="badge" style="background: rgba(255,255,255,0.05); color: var(--text-muted); padding: 2px 6px; border-radius: 4px; font-size: 0.68rem;">N/A</span>`;
+        if (status >= 200 && status < 300) {
+          return `<span class="badge" style="background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3); font-weight:bold; padding: 2px 6px; border-radius: 4px; font-size: 0.68rem;">${status}</span>`;
+        }
+        if (status === 401 || status === 403) {
+          return `<span class="badge" style="background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.68rem;">${status}</span>`;
+        }
+        return `<span class="badge" style="background: rgba(245,158,11,0.15); color: #f59e0b; border: 1px solid rgba(245,158,11,0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.68rem;">${status}</span>`;
+      };
+
+      result.rbacMatrix.forEach(row => {
+        const rowStyle = row.isVulnerable ? 'background: rgba(239, 68, 68, 0.04); border-bottom: 1px solid var(--border-color);' : 'border-bottom: 1px solid var(--border-color);';
+        const routeLabel = row.isVulnerable ? `<span style="color: var(--color-critical); font-weight:bold;"><i class="fa-solid fa-triangle-exclamation"></i> ${escW(row.path)}</span>` : escW(row.path);
+        
+        rbacHtml += `
+          <tr style="${rowStyle}">
+            <td style="padding: 10px; font-family: monospace; font-size: 0.72rem; word-break: break-all;">${routeLabel}</td>
+            <td style="padding: 10px; font-family: monospace; font-weight: 700;">${row.method}</td>
+            <td style="padding: 10px; text-align: center;">${getBadge(row.guest)}</td>
+            <td style="padding: 10px; text-align: center;">${getBadge(row.userA)}</td>
+            <td style="padding: 10px; text-align: center;">${getBadge(row.userB)}</td>
+            <td style="padding: 10px; text-align: center;">${getBadge(row.manager)}</td>
+            <td style="padding: 10px; text-align: center;">${getBadge(row.admin)}</td>
+          </tr>
+        `;
+      });
+
+      rbacHtml += `
+            </tbody>
+          </table>
+        </div>
+      `;
+      rbacContainer.innerHTML = rbacHtml;
+    } else {
+      rbacContainer.style.display = 'none';
+    }
+  }
+
+  // Render Parameter Mining Section
+  const paramsContainer = document.getElementById('wapt-params-section');
+  if (paramsContainer) {
+    if (result.discoveredParameters && Object.keys(result.discoveredParameters).length > 0) {
+      paramsContainer.style.display = 'block';
+      let paramsHtml = `
+        <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--text-primary);"><i class="fa-solid fa-magnifying-glass" style="margin-right: 6px; color: #60a5fa;"></i> Mined API Parameters</h3>
+        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; max-height: 200px; overflow-y: auto; margin-bottom: 20px;">
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+      `;
+
+      for (const [endpoint, params] of Object.entries(result.discoveredParameters)) {
+        if (!params || params.length === 0) continue;
+        paramsHtml += `
+          <div style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; margin-bottom: 4px;">
+            <div style="font-family: monospace; font-size: 0.72rem; color: var(--text-primary); margin-bottom: 4px; word-break: break-all;">${escW(endpoint)}</div>
+            <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+              ${params.map(p => `<span style="background: rgba(96,165,250,0.1); color: #60a5fa; border: 1px solid rgba(96,165,250,0.25); border-radius: 4px; padding: 2px 6px; font-size: 0.64rem; font-family: monospace;">${escW(p)}</span>`).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      paramsHtml += `
+          </div>
+        </div>
+      `;
+      paramsContainer.innerHTML = paramsHtml;
+    } else {
+      paramsContainer.style.display = 'none';
+    }
+  }
+
   // Trigger loading of Benchmarks
   loadWaptBenchmarks();
+
 
   const container = document.getElementById('wapt-findings-list');
   if (!result.findings?.length) {
