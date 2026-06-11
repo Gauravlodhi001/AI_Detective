@@ -1,6 +1,8 @@
 const http = require('http');
 const https = require('https');
 const { URL } = require('url');
+const fs = require('fs');
+const path = require('path');
 
 const { StatefulSessionManager } = require('../utils/statefulSession');
 const { SessionBridge } = require('../utils/sessionBridge');
@@ -2261,8 +2263,50 @@ async function loginAndGetHeaders(baseUrl, authConfig, log) {
   return {};
 }
 
-async function runWaptScan(targetUrl, authConfig = null) {
+function findLastWaptReport(targetUrl, log) {
+  try {
+    const REPORTS_DIR = path.join(__dirname, '../../reports');
+    if (!fs.existsSync(REPORTS_DIR)) return null;
+
+    const files = fs.readdirSync(REPORTS_DIR);
+    let newestReport = null;
+    let newestTime = 0;
+
+    files.forEach(file => {
+      if (file.startsWith('wapt-') && file.endsWith('.json')) {
+        try {
+          const filePath = path.join(REPORTS_DIR, file);
+          const raw = fs.readFileSync(filePath, 'utf-8');
+          const data = JSON.parse(raw);
+          if (data.targetUrl === targetUrl && data.scanTime > newestTime) {
+            newestTime = data.scanTime;
+            newestReport = data;
+          }
+        } catch (e) {}
+      }
+    });
+    return newestReport;
+  } catch (err) {
+    log.push(`[WAPT] Error looking up past report sessions: ${err.message}`);
+    return null;
+  }
+}
+
+async function runWaptScan(targetUrl, authConfig = null, scanId = null) {
   const log = [];
+  
+  if (scanId) {
+    global.waptScanLogs = global.waptScanLogs || {};
+    global.waptScanLogs[scanId] = [];
+    const originalPush = log.push;
+    log.push = function(...args) {
+      originalPush.apply(this, args);
+      if (global.waptScanLogs[scanId]) {
+        global.waptScanLogs[scanId].push(...args);
+      }
+    };
+  }
+
   const startTime = Date.now();
 
   log.push(`[WAPT] Initializing WAPT Security Scan for: ${targetUrl}`);
@@ -2295,11 +2339,42 @@ async function runWaptScan(targetUrl, authConfig = null) {
     admin: new StatefulSessionManager('admin', multiAuthConfig?.admin || { authType: 'none' }, log)
   };
 
-  // 2. Perform initial logins for all configured sessions
+  // 2. Perform initial logins for all configured sessions (reusing cached reports sessions if valid)
+  const lastReport = findLastWaptReport(targetUrl, log);
+
   for (const [roleName, session] of Object.entries(sessions)) {
     if (session.authConfig.authType !== 'none') {
-      log.push(`[WAPT] Initializing session for role: ${roleName}`);
-      await session.performLogin(rawRequest, resolvedUrl);
+      let sessionLoaded = false;
+
+      // Attempt to load past session headers from last report
+      if (lastReport && lastReport.savedSessions && lastReport.savedSessions[roleName]) {
+        const saved = lastReport.savedSessions[roleName];
+        log.push(`[WAPT] Found cached session headers for role: ${roleName}`);
+
+        session.authHeaders = saved.authHeaders || {};
+        session.cookies = saved.cookies || [];
+        session.token = saved.token || null;
+        session.refreshToken = saved.refreshToken || null;
+
+        const isCookieExpired = session.isCookieExpired();
+        if (!isCookieExpired) {
+          const isAlive = await session.checkSessionHealth(rawRequest, resolvedUrl);
+          if (isAlive) {
+            log.push(`[WAPT] Session health check passed. Reusing cached session for role: ${roleName}`);
+            session.state = 'AUTHENTICATED';
+            sessionLoaded = true;
+          } else {
+            log.push(`[WAPT] Session health check failed. Invalidating cached session for role: ${roleName}`);
+          }
+        } else {
+          log.push(`[WAPT] Cached session cookies are expired for role: ${roleName}`);
+        }
+      }
+
+      if (!sessionLoaded) {
+        log.push(`[WAPT] Initializing fresh session for role: ${roleName}`);
+        await session.performLogin(rawRequest, resolvedUrl);
+      }
     }
   }
 
@@ -2308,7 +2383,8 @@ async function runWaptScan(targetUrl, authConfig = null) {
 
   // 4. Run Crawler to map endpoints (uses browser-sync crawler, fallback to http spider)
   const crawler = new RecursiveCrawler(log, sessionBridge);
-  const crawledEndpoints = await crawler.crawl(resolvedUrl, rawRequest, 2, true);
+  const hasActiveAuth = Object.values(sessions).some(s => s.authConfig.authType !== 'none');
+  const crawledEndpoints = await crawler.crawl(resolvedUrl, rawRequest, hasActiveAuth ? 2 : 1, true);
   
   // Merge endpoints map
   const endpointsRegistry = new Map(); // Map<string, { path, fullUrl, method }>
@@ -2319,68 +2395,76 @@ async function runWaptScan(targetUrl, authConfig = null) {
 
   // 5. Discover Swagger/OpenAPI specifications
   const swaggerPaths = ['/swagger.json', '/openapi.json', '/api-docs', '/api/swagger.json', '/api/openapi.json'];
-  for (const sPath of swaggerPaths) {
+  const swaggerPromises = swaggerPaths.map(async (sPath) => {
     const sUrl = resolvedUrl.endsWith('/') ? resolvedUrl.slice(0, -1) + sPath : resolvedUrl + sPath;
-    const sRes = await request(sUrl, { method: 'GET' });
-    if (sRes.status === 200) {
-      log.push(`[WAPT] Discovered Swagger/OpenAPI endpoint: ${sUrl}`);
-      try {
-        const spec = JSON.parse(sRes.body);
-        if (spec.paths) {
-          Object.keys(spec.paths).forEach(p => {
-            const methods = Object.keys(spec.paths[p]);
-            methods.forEach(m => {
-              if (['get', 'post', 'put', 'delete', 'patch'].includes(m.toLowerCase())) {
-                const cleanP = p.replace(/{[^}]+}/g, '1'); // Replace path parameters with dummy value
-                const fullPUrl = resolvedUrl.endsWith('/') ? resolvedUrl.slice(0, -1) + cleanP : resolvedUrl + cleanP;
-                endpointsRegistry.set(`${m.toUpperCase()}:${cleanP}`, {
-                  path: cleanP,
-                  fullUrl: fullPUrl,
-                  method: m.toUpperCase()
-                });
-              }
+    try {
+      const sRes = await request(sUrl, { method: 'GET' });
+      if (sRes.status === 200) {
+        log.push(`[WAPT] Discovered Swagger/OpenAPI endpoint: ${sUrl}`);
+        try {
+          const spec = JSON.parse(sRes.body);
+          if (spec.paths) {
+            Object.keys(spec.paths).forEach(p => {
+              const methods = Object.keys(spec.paths[p]);
+              methods.forEach(m => {
+                if (['get', 'post', 'put', 'delete', 'patch'].includes(m.toLowerCase())) {
+                  const cleanP = p.replace(/{[^}]+}/g, '1'); // Replace path parameters with dummy value
+                  const fullPUrl = resolvedUrl.endsWith('/') ? resolvedUrl.slice(0, -1) + cleanP : resolvedUrl + cleanP;
+                  endpointsRegistry.set(`${m.toUpperCase()}:${cleanP}`, {
+                    path: cleanP,
+                    fullUrl: fullPUrl,
+                    method: m.toUpperCase()
+                  });
+                }
+              });
             });
-          });
+          }
+        } catch (e) {
+          log.push(`[WAPT] Failed to parse Swagger JSON: ${e.message}`);
         }
-      } catch (e) {
-        log.push(`[WAPT] Failed to parse Swagger JSON: ${e.message}`);
       }
+    } catch (err) {
+      // Ignore request error
     }
-  }
+  });
+  await Promise.all(swaggerPromises);
 
   // 6. Discover GraphQL
   const graphqlPaths = ['/graphql', '/query', '/api/graphql', '/v1/graphql'];
   const graphqlParser = new GraphQLParser(log);
-  let hasGraphQL = false;
-  for (const gPath of graphqlPaths) {
+  const graphqlPromises = graphqlPaths.map(async (gPath) => {
     const gUrl = resolvedUrl.endsWith('/') ? resolvedUrl.slice(0, -1) + gPath : resolvedUrl + gPath;
-    // Probe check
-    const gRes = await request(gUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: '{ __typename }' })
-    });
+    try {
+      const gRes = await request(gUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: '{ __typename }' })
+      });
+      return { gPath, gUrl, gRes };
+    } catch (err) {
+      return { gPath, gUrl, gRes: { status: 0 } };
+    }
+  });
+  
+  const graphqlResults = await Promise.all(graphqlPromises);
+  const activeGql = graphqlResults.find(r => r.gRes.status === 200 || r.gRes.status === 400 || r.gRes.status === 401 || r.gRes.status === 403);
+  if (activeGql) {
+    log.push(`[WAPT] GraphQL endpoint detected at: ${activeGql.gUrl}`);
     
-    if (gRes.status === 200 || gRes.status === 400 || gRes.status === 401 || gRes.status === 403) {
-      log.push(`[WAPT] GraphQL endpoint detected at: ${gUrl}`);
-      hasGraphQL = true;
-      
-      // Attempt Introspection
-      const schema = await graphqlParser.fetchSchema(rawRequest, gUrl, sessions.userA.getHeaders());
-      if (schema) {
-        const operations = graphqlParser.generateTestOperations(schema);
-        operations.forEach(op => {
-          // Register operations as scan targets
-          endpointsRegistry.set(`POST:${gPath}/${op.name}`, {
-            path: `${gPath}/${op.name}`,
-            fullUrl: gUrl,
-            method: 'POST',
-            isGraphQL: true,
-            queryTemplate: op.query
-          });
+    // Attempt Introspection
+    const schema = await graphqlParser.fetchSchema(rawRequest, activeGql.gUrl, sessions.userA.getHeaders());
+    if (schema) {
+      const operations = graphqlParser.generateTestOperations(schema);
+      operations.forEach(op => {
+        // Register operations as scan targets
+        endpointsRegistry.set(`POST:${activeGql.gPath}/${op.name}`, {
+          path: `${activeGql.gPath}/${op.name}`,
+          fullUrl: activeGql.gUrl,
+          method: 'POST',
+          isGraphQL: true,
+          queryTemplate: op.query
         });
-      }
-      break; // Only test first active GraphQL endpoint
+      });
     }
   }
 
@@ -2398,7 +2482,7 @@ async function runWaptScan(targetUrl, authConfig = null) {
     jsScripts.push(scriptMatch[1]);
   }
 
-  for (const scriptSrc of jsScripts) {
+  const jsPromises = jsScripts.map(async (scriptSrc) => {
     try {
       let scriptUrl = scriptSrc;
       if (scriptSrc.startsWith('/') && !scriptSrc.startsWith('//')) {
@@ -2411,17 +2495,23 @@ async function runWaptScan(targetUrl, authConfig = null) {
       const jsRes = await request(scriptUrl, { method: 'GET' });
       if (jsRes.status === 200 && jsRes.body) {
         const mined = jsMiner.mineEndpoints(jsRes.body, resolvedUrl);
-        mined.forEach(e => {
-          const key = `${e.method}:${e.path}`;
-          if (!endpointsRegistry.has(key)) {
-            endpointsRegistry.set(key, e);
-          }
-        });
+        return mined;
       }
     } catch (e) {
       log.push(`[WAPT] Error mining script ${scriptSrc}: ${e.message}`);
     }
-  }
+    return [];
+  });
+  
+  const jsResults = await Promise.all(jsPromises);
+  jsResults.forEach(mined => {
+    mined.forEach(e => {
+      const key = `${e.method}:${e.path}`;
+      if (!endpointsRegistry.has(key)) {
+        endpointsRegistry.set(key, e);
+      }
+    });
+  });
 
   // Convert map to array
   const endpoints = Array.from(endpointsRegistry.values());
@@ -2440,65 +2530,74 @@ async function runWaptScan(targetUrl, authConfig = null) {
   });
 
   // 9. Run RBAC Matrix Audit
-  const rbacAuditor = new RbacAuditor(log);
-  const rbacMatrix = await rbacAuditor.runAudit(endpoints, sessions, rawRequest);
+  let rbacMatrix = [];
+  if (hasActiveAuth) {
+    const rbacAuditor = new RbacAuditor(log);
+    rbacMatrix = await rbacAuditor.runAudit(endpoints, sessions, rawRequest);
+  } else {
+    log.push('[WAPT] Anonymous scan mode: Skipping RBAC privilege matrix audit.');
+  }
 
   // 10. Run IDOR Similarity Verifications
-  const idorVerifier = new IdorVerifier(log);
   const idorFindings = [];
-  
-  const potentialIdorEndpoints = endpoints.filter(e => {
-    const params = paramMiner.getParameters(e.fullUrl);
-    const hasIdParam = params.some(p => ['id', 'user', 'account', 'invoice', 'order', 'role', 'uuid'].includes(p.toLowerCase()));
-    const pathHasParam = e.path.includes(':') || /\/[0-9]+(\/|$)/.test(e.path);
-    return hasIdParam || pathHasParam;
-  });
-
-  for (const endpoint of potentialIdorEndpoints) {
-    log.push(`[WAPT] Evaluating IDOR on: ${endpoint.method} ${endpoint.path}`);
+  if (hasActiveAuth) {
+    const idorVerifier = new IdorVerifier(log);
     
-    const ownerRes = await rawRequest(endpoint.fullUrl, {
-      method: endpoint.method,
-      headers: sessions.userA.getHeaders()
+    const potentialIdorEndpoints = endpoints.filter(e => {
+      const params = paramMiner.getParameters(e.fullUrl);
+      const hasIdParam = params.some(p => ['id', 'user', 'account', 'invoice', 'order', 'role', 'uuid'].includes(p.toLowerCase()));
+      const pathHasParam = e.path.includes(':') || /\/[0-9]+(\/|$)/.test(e.path);
+      return hasIdParam || pathHasParam;
     });
 
-    if (ownerRes.status >= 200 && ownerRes.status < 300) {
-      const attackerRes = await rawRequest(endpoint.fullUrl, {
-        method: endpoint.method,
-        headers: sessions.userB.getHeaders()
-      });
-
-      const guestRes = await rawRequest(endpoint.fullUrl, {
-        method: endpoint.method,
-        headers: sessions.guest.getHeaders()
-      });
-
-      const verification = idorVerifier.verifyIdor(ownerRes, attackerRes, guestRes, multiAuthConfig?.userA, multiAuthConfig?.userB);
+    for (const endpoint of potentialIdorEndpoints) {
+      log.push(`[WAPT] Evaluating IDOR on: ${endpoint.method} ${endpoint.path}`);
       
-      if (verification.isVulnerable) {
-        log.push(`[WAPT] IDOR Vulnerability confirmed on: ${endpoint.method} ${endpoint.path}`);
-        idorFindings.push(createFinding({
-          title: 'Broken Object-Level Authorization (IDOR)',
-          observation: `An IDOR vulnerability was validated on the endpoint. An authenticated user (User B) successfully retrieved resource data belonging to another user (User A) without authorization controls.`,
-          evidence: `Endpoint: ${endpoint.method} ${endpoint.path} | Reason: ${verification.reason}`,
-          detectionLogic: `Issue parallel authenticated requests with owner and attacker session tokens and execute Jaccard response-similarity metrics.`,
-          aiAnalysis: `The endpoint does not validate if the authenticated session identity matches the resource identity owner before returning records, exposing data to access leakage.`,
-          falsePositiveAssessment: `Confirm if the resource represents public profile information meant for general access.`,
-          detectionConfidence: 95,
-          riskConfidence: 90,
-          businessImpact: `Complete data confidentiality exposure, enabling unauthorized access to invoice details, user profile credentials, and private customer documents.`,
-          remediation: `Implement robust backend checks validating resource ownership (e.g. comparing req.user.id with resource.ownerId) before sending responses.`,
-          finalClassification: 'Confirmed Vulnerability',
-          finalSeverity: 'High',
-          rawRequest: attackerRes.rawRequest,
-          rawResponse: attackerRes.rawResponse,
-          owasp: 'A01:2021-Broken Access Control',
-          cwe: 'CWE-639',
-          cvss: 'CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N (6.5)',
-          asvs: 'ASVS V4.0.3-4.1.1'
-        }));
+      const ownerRes = await rawRequest(endpoint.fullUrl, {
+        method: endpoint.method,
+        headers: sessions.userA.getHeaders()
+      });
+
+      if (ownerRes.status >= 200 && ownerRes.status < 300) {
+        const attackerRes = await rawRequest(endpoint.fullUrl, {
+          method: endpoint.method,
+          headers: sessions.userB.getHeaders()
+        });
+
+        const guestRes = await rawRequest(endpoint.fullUrl, {
+          method: endpoint.method,
+          headers: sessions.guest.getHeaders()
+        });
+
+        const verification = idorVerifier.verifyIdor(ownerRes, attackerRes, guestRes, multiAuthConfig?.userA, multiAuthConfig?.userB);
+        
+        if (verification.isVulnerable) {
+          log.push(`[WAPT] IDOR Vulnerability confirmed on: ${endpoint.method} ${endpoint.path}`);
+          idorFindings.push(createFinding({
+            title: 'Broken Object-Level Authorization (IDOR)',
+            observation: `An IDOR vulnerability was validated on the endpoint. An authenticated user (User B) successfully retrieved resource data belonging to another user (User A) without authorization controls.`,
+            evidence: `Endpoint: ${endpoint.method} ${endpoint.path} | Reason: ${verification.reason}`,
+            detectionLogic: `Issue parallel authenticated requests with owner and attacker session tokens and execute Jaccard response-similarity metrics.`,
+            aiAnalysis: `The endpoint does not validate if the authenticated session identity matches the resource identity owner before returning records, exposing data to access leakage.`,
+            falsePositiveAssessment: `Confirm if the resource represents public profile information meant for general access.`,
+            detectionConfidence: 95,
+            riskConfidence: 90,
+            businessImpact: `Complete data confidentiality exposure, enabling unauthorized access to invoice details, user profile credentials, and private customer documents.`,
+            remediation: `Implement robust backend checks validating resource ownership (e.g. comparing req.user.id with resource.ownerId) before sending responses.`,
+            finalClassification: 'Confirmed Vulnerability',
+            finalSeverity: 'High',
+            rawRequest: attackerRes.rawRequest,
+            rawResponse: attackerRes.rawResponse,
+            owasp: 'A01:2021-Broken Access Control',
+            cwe: 'CWE-639',
+            cvss: 'CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N (6.5)',
+            asvs: 'ASVS V4.0.3-4.1.1'
+          }));
+        }
       }
     }
+  } else {
+    log.push('[WAPT] Anonymous scan mode: Skipping IDOR similarity verification checks.');
   }
 
   // 11. Run standard checks injecting userA's stateful session headers
@@ -2775,6 +2874,18 @@ async function runWaptScan(targetUrl, authConfig = null) {
 
   log.push(`[WAPT] Passive Security Scan completed in ${duration}ms.`);
 
+  const savedSessions = {};
+  for (const [roleName, session] of Object.entries(sessions)) {
+    if (session.authConfig.authType !== 'none' && session.state === 'AUTHENTICATED') {
+      savedSessions[roleName] = {
+        authHeaders: session.getHeaders(),
+        cookies: session.cookies,
+        token: session.token,
+        refreshToken: session.refreshToken
+      };
+    }
+  }
+
   return {
     targetUrl,
     scanTime: Date.now(),
@@ -2787,6 +2898,7 @@ async function runWaptScan(targetUrl, authConfig = null) {
     discoveredParameters: paramMiner.exportRegistry(),
     minedEndpoints: endpoints,
     rbacMatrix: rbacMatrix,
+    savedSessions,
     metrics: {
       totalFindings: allFindings.length,
       severityCounts: counts,

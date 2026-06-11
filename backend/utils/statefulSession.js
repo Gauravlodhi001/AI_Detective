@@ -214,6 +214,7 @@ class StatefulSessionManager {
           this.parseCookies(cookies);
 
           this.authHeaders = { 'Cookie': cookiePairs };
+          this.state = 'AUTHENTICATED';
           this.log.push(`[Session:${this.roleName}] Login successful. Cookies captured.`);
           return true;
         }
@@ -223,6 +224,7 @@ class StatefulSessionManager {
           const token = body.token || body.accessToken || body.access_token || body.jwt;
           if (token) {
             this.authHeaders = { 'Authorization': `Bearer ${token}` };
+            this.state = 'AUTHENTICATED';
             if (body.refreshToken || body.refresh_token) {
               this.refreshToken = body.refreshToken || body.refresh_token;
             }

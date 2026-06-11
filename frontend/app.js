@@ -575,7 +575,12 @@ async function viewReportDetails(reportId) {
       return;
     }
     const report = await res.json();
-    showReport(report);
+    if (report.type === 'wapt') {
+      switchTab('wapt');
+      renderWaptResults(report);
+    } else {
+      showReport(report);
+    }
   } catch (err) {
     console.error('Error fetching report details:', err);
     alert('Failed to retrieve report details.');
@@ -1223,6 +1228,7 @@ function saveActiveRoleConfig() {
   window.waptRolesConfig[role].authType = authType;
 
   if (authType === 'cookie' || authType === 'jwt') {
+    window.waptRolesConfig[role].canaryUrl = (document.getElementById('wapt-auth-canaryurl')?.value || '').trim();
     window.waptRolesConfig[role].credentials = {
       loginUrl: (document.getElementById('wapt-auth-loginurl')?.value || '').trim(),
       usernameField: (document.getElementById('wapt-auth-userfield')?.value || 'email').trim(),
@@ -1231,6 +1237,7 @@ function saveActiveRoleConfig() {
       passwordValue: (document.getElementById('wapt-auth-pwdval')?.value || '').trim()
     };
   } else if (authType === 'header') {
+    window.waptRolesConfig[role].canaryUrl = '';
     const rawJson = (document.getElementById('wapt-auth-headersjson')?.value || '').trim();
     if (rawJson) {
       try {
@@ -1242,6 +1249,7 @@ function saveActiveRoleConfig() {
       window.waptRolesConfig[role].staticHeaders = {};
     }
   } else {
+    window.waptRolesConfig[role].canaryUrl = '';
     window.waptRolesConfig[role].credentials = {};
     window.waptRolesConfig[role].staticHeaders = {};
   }
@@ -1275,6 +1283,9 @@ function loadRoleConfigIntoUI(role) {
 
   const pwdValField = document.getElementById('wapt-auth-pwdval');
   if (pwdValField) pwdValField.value = creds.passwordValue || '';
+
+  const canaryUrlField = document.getElementById('wapt-auth-canaryurl');
+  if (canaryUrlField) canaryUrlField.value = config.canaryUrl || '';
 
   // Set static headers JSON
   const headersField = document.getElementById('wapt-auth-headersjson');
@@ -1314,6 +1325,7 @@ async function handleWaptScan() {
   // Extract authConfig parameters
   const isMultiRole = document.getElementById('wapt-multi-role-toggle')?.checked || false;
   let authConfig = {};
+  let authType = 'none';
 
   if (isMultiRole) {
     // Save current active role values first
@@ -1326,9 +1338,10 @@ async function handleWaptScan() {
       admin: window.waptRolesConfig.admin
     };
   } else {
-    const authType = document.getElementById('wapt-auth-type')?.value || 'none';
+    authType = document.getElementById('wapt-auth-type')?.value || 'none';
     let singleConfig = { authType };
     if (authType === 'cookie' || authType === 'jwt') {
+      singleConfig.canaryUrl = (document.getElementById('wapt-auth-canaryurl')?.value || '').trim();
       singleConfig.credentials = {
         loginUrl: (document.getElementById('wapt-auth-loginurl')?.value || '').trim(),
         usernameField: (document.getElementById('wapt-auth-userfield')?.value || 'email').trim(),
@@ -1359,27 +1372,48 @@ async function handleWaptScan() {
   }
 
 
+  const scanId = `wapt-scan-${Date.now()}`;
+
   const btn = document.getElementById('wapt-scan-btn');
   btn.disabled = true;
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Scanning…';
   clearWaptConsole();
   waptLog(`[WAPT] Target: ${targetUrl}`);
-  waptLog(`[WAPT] Mode: ${authType === 'none' ? 'Anonymous Black Box' : 'Authenticated Gray Box'}`);
+  waptLog(`[WAPT] Mode: ${isMultiRole ? 'Multi-Role RBAC Audit' : (authType === 'none' ? 'Anonymous Black Box' : 'Authenticated Gray Box')}`);
   waptLog('[WAPT] Running 10 security checks — this may take 30-60 seconds…');
   document.getElementById('wapt-results-placeholder').style.display = 'flex';
   document.getElementById('wapt-results-panel').style.display = 'none';
+
+  let loggedCount = 0;
+  const pollInterval = setInterval(async () => {
+    try {
+      const pollRes = await fetch(`/api/wapt/scan/${scanId}/logs`);
+      const pollData = await pollRes.json();
+      if (pollData.success && pollData.logs && pollData.logs.length > loggedCount) {
+        const newLogs = pollData.logs.slice(loggedCount);
+        newLogs.forEach(l => waptLog(l));
+        loggedCount = pollData.logs.length;
+      }
+    } catch (e) {}
+  }, 1500);
+
   try {
     const res = await fetch('/api/wapt/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetUrl, authConfig })
+      body: JSON.stringify({ targetUrl, authConfig, scanId })
     });
     const data = await res.json();
+    clearInterval(pollInterval);
     if (!data.success) throw new Error(data.message || 'Scan failed');
+    
+    // Clear and draw final logs cleanly
+    clearWaptConsole();
     (data.result?.log || []).forEach(l => waptLog(l));
     waptLog(`[DONE] Score: ${data.result.metrics.securityScore}/100  Grade: ${data.result.metrics.grade}`);
     renderWaptResults(data.result);
   } catch (err) {
+    clearInterval(pollInterval);
     waptLog(`[ERROR] ${err.message}`);
   } finally {
     btn.disabled = false;

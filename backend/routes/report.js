@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { buildHtmlReport, buildDocReport } = require('../parsers/report_builder');
 const { buildCodePdfReport } = require('../parsers/code_pdf_builder');
+const { buildPdfReport } = require('../parsers/pdf_builder');
 
 const REPORTS_DIR = path.join(__dirname, '../../reports');
 
@@ -36,13 +37,14 @@ router.get('/list', (req, res, next) => {
           const data = JSON.parse(rawContent);
 
           reports.push({
-            id: data.id,
+            id: data.id || data.reportId,
             projectName: data.projectName,
             scanTime: data.scanTime,
-            filesScannedCount: data.filesScannedCount,
-            semgrepStatus: data.semgrepStatus,
+            filesScannedCount: data.type === 'wapt' ? 'N/A' : (data.filesScannedCount || 0),
+            semgrepStatus: data.semgrepStatus || 'N/A',
             metrics: data.metrics,
-            findingCount: data.findings ? data.findings.length : 0
+            findingCount: data.findings ? data.findings.length : 0,
+            type: data.type || 'sast'
           });
         } catch (e) {
           console.error(`Error reading report file ${file}:`, e);
@@ -145,8 +147,12 @@ router.get('/:id/download', async (req, res, next) => {
       return res.send(docBuffer);
     } else if (format === 'pdf') {
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${reportData.projectName}-security-report.pdf"`);
-      return buildCodePdfReport(reportData, res);
+      res.setHeader('Content-Disposition', `attachment; filename="${reportData.projectName || 'wapt'}-security-report.pdf"`);
+      if (reportData.type === 'wapt') {
+        return buildPdfReport(reportData, res);
+      } else {
+        return buildCodePdfReport(reportData, res);
+      }
     } else {
       // Default: send raw JSON
       res.setHeader('Content-Type', 'application/json');
@@ -174,8 +180,12 @@ router.get('/:id/pdf', (req, res, next) => {
     const reportData = JSON.parse(rawContent);
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${reportData.projectName}-security-report.pdf"`);
-    return buildCodePdfReport(reportData, res);
+    res.setHeader('Content-Disposition', `attachment; filename="${reportData.projectName || 'wapt'}-security-report.pdf"`);
+    if (reportData.type === 'wapt') {
+      return buildPdfReport(reportData, res);
+    } else {
+      return buildCodePdfReport(reportData, res);
+    }
   } catch (err) {
     next(err);
   }

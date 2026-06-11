@@ -18,7 +18,7 @@ if (!fs.existsSync(REPORTS_DIR)) {
  */
 router.post('/scan', async (req, res, next) => {
   try {
-    const { targetUrl, authConfig } = req.body;
+    const { targetUrl, authConfig, scanId } = req.body;
 
     if (!targetUrl) {
       return res.status(400).json({ success: false, message: 'Target URL is required' });
@@ -28,8 +28,10 @@ router.post('/scan', async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid URL scheme. Must begin with http:// or https://' });
     }
 
+    const activeScanId = scanId || `wapt-scan-${Date.now()}`;
+
     // Run the scan with auth configuration
-    const result = await runWaptScan(targetUrl, authConfig);
+    const result = await runWaptScan(targetUrl, authConfig, activeScanId);
 
     // Save report
     const scanTime = result.scanTime;
@@ -45,6 +47,13 @@ router.post('/scan', async (req, res, next) => {
 
     fs.writeFileSync(reportPath, JSON.stringify(reportData, null, 2), 'utf-8');
 
+    // Clean up logs map after a delay to allow final polling cycles to finish
+    setTimeout(() => {
+      if (global.waptScanLogs) {
+        delete global.waptScanLogs[activeScanId];
+      }
+    }, 10000);
+
     res.json({
       success: true,
       message: 'WAPT scan completed successfully',
@@ -52,6 +61,24 @@ router.post('/scan', async (req, res, next) => {
       result: reportData
     });
 
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @route GET /api/wapt/scan/:id/logs
+ * @desc Get real-time logs for a running scan
+ */
+router.get('/scan/:id/logs', (req, res, next) => {
+  try {
+    const { id } = req.params;
+    global.waptScanLogs = global.waptScanLogs || {};
+    const logs = global.waptScanLogs[id] || [];
+    res.json({
+      success: true,
+      logs
+    });
   } catch (err) {
     next(err);
   }

@@ -6,6 +6,7 @@ class RecursiveCrawler {
     this.sessionBridge = sessionBridge || null;
     this.visited = new Set();
     this.endpoints = []; // Array of { path, fullUrl, method }
+    this.maxPages = 15; // Hard limit to prevent crawling forever
   }
 
   // Parses HTML body to find links and forms (Fallback static parser)
@@ -24,8 +25,7 @@ class RecursiveCrawler {
           href = origin + href;
         } else if (!href.startsWith('http://') && !href.startsWith('https://')) {
           // Relative link
-          const base = currentUrl.endsWith('/') ? currentUrl : currentUrl + '/';
-          href = new URL(href, base).href;
+          href = new URL(href, currentUrl).href;
         }
         
         const parsedHref = new URL(href);
@@ -48,8 +48,7 @@ class RecursiveCrawler {
         if (action.startsWith('/') && !action.startsWith('//')) {
           action = origin + action;
         } else if (!action.startsWith('http://') && !action.startsWith('https://')) {
-          const base = currentUrl.endsWith('/') ? currentUrl : currentUrl + '/';
-          action = new URL(action, base).href;
+          action = new URL(action, currentUrl).href;
         }
         const parsedAction = new URL(action);
         if (parsedAction.origin === origin) {
@@ -105,6 +104,10 @@ class RecursiveCrawler {
     const origin = parsedStart.origin;
 
     while (queue.length > 0) {
+      if (this.visited.size >= this.maxPages) {
+        this.log.push(`[Crawler] Reached maximum page limit of ${this.maxPages}. Stopping crawl.`);
+        break;
+      }
       const { url, depth } = queue.shift();
       const cleanUrl = url.split('?')[0].split('#')[0];
 
@@ -181,6 +184,10 @@ class RecursiveCrawler {
       : {};
 
     while (queue.length > 0) {
+      if (this.visited.size >= this.maxPages) {
+        this.log.push(`[Crawler] Reached maximum page limit of ${this.maxPages}. Stopping crawl.`);
+        break;
+      }
       const { url, depth } = queue.shift();
       const cleanUrl = url.split('?')[0].split('#')[0];
 
