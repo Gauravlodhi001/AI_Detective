@@ -1186,14 +1186,58 @@ function escW(str) {
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+function toggleWaptAuthFields(value) {
+  const credsContainer = document.getElementById('wapt-auth-creds-fields');
+  const headersContainer = document.getElementById('wapt-auth-headers-fields');
+  
+  if (value === 'cookie' || value === 'jwt') {
+    if (credsContainer) credsContainer.style.display = 'block';
+    if (headersContainer) headersContainer.style.display = 'none';
+  } else if (value === 'header') {
+    if (credsContainer) credsContainer.style.display = 'none';
+    if (headersContainer) headersContainer.style.display = 'block';
+  } else {
+    if (credsContainer) credsContainer.style.display = 'none';
+    if (headersContainer) headersContainer.style.display = 'none';
+  }
+}
+
 async function handleWaptScan() {
   const targetUrl = (document.getElementById('wapt-url-input')?.value || '').trim();
   if (!targetUrl) { waptLog('[ERROR] Please enter a target URL.'); return; }
+
+  // Extract authConfig parameters
+  const authType = document.getElementById('wapt-auth-type')?.value || 'none';
+  let authConfig = { authType };
+
+  if (authType === 'cookie' || authType === 'jwt') {
+    authConfig.credentials = {
+      loginUrl: (document.getElementById('wapt-auth-loginurl')?.value || '').trim(),
+      usernameField: (document.getElementById('wapt-auth-userfield')?.value || 'email').trim(),
+      passwordField: (document.getElementById('wapt-auth-pwdfield')?.value || 'password').trim(),
+      usernameValue: (document.getElementById('wapt-auth-userval')?.value || '').trim(),
+      passwordValue: (document.getElementById('wapt-auth-pwdval')?.value || '').trim()
+    };
+  } else if (authType === 'header') {
+    const rawJson = (document.getElementById('wapt-auth-headersjson')?.value || '').trim();
+    if (rawJson) {
+      try {
+        authConfig.staticHeaders = JSON.parse(rawJson);
+      } catch (e) {
+        waptLog('[ERROR] Invalid JSON in Static Headers. Using empty configuration.');
+        authConfig.staticHeaders = {};
+      }
+    } else {
+      authConfig.staticHeaders = {};
+    }
+  }
+
   const btn = document.getElementById('wapt-scan-btn');
   btn.disabled = true;
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Scanning…';
   clearWaptConsole();
   waptLog(`[WAPT] Target: ${targetUrl}`);
+  waptLog(`[WAPT] Mode: ${authType === 'none' ? 'Anonymous Black Box' : 'Authenticated Gray Box'}`);
   waptLog('[WAPT] Running 10 security checks — this may take 30-60 seconds…');
   document.getElementById('wapt-results-placeholder').style.display = 'flex';
   document.getElementById('wapt-results-panel').style.display = 'none';
@@ -1201,7 +1245,7 @@ async function handleWaptScan() {
     const res = await fetch('/api/wapt/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetUrl })
+      body: JSON.stringify({ targetUrl, authConfig })
     });
     const data = await res.json();
     if (!data.success) throw new Error(data.message || 'Scan failed');

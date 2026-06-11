@@ -18,7 +18,7 @@ if (!fs.existsSync(REPORTS_DIR)) {
  */
 router.post('/scan', async (req, res, next) => {
   try {
-    const { targetUrl } = req.body;
+    const { targetUrl, authConfig } = req.body;
 
     if (!targetUrl) {
       return res.status(400).json({ success: false, message: 'Target URL is required' });
@@ -28,8 +28,8 @@ router.post('/scan', async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid URL scheme. Must begin with http:// or https://' });
     }
 
-    // Run the scan
-    const result = await runWaptScan(targetUrl);
+    // Run the scan with auth configuration
+    const result = await runWaptScan(targetUrl, authConfig);
 
     // Save report
     const scanTime = result.scanTime;

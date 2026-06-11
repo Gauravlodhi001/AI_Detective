@@ -41,6 +41,10 @@ function buildPdfReport(reportData, res) {
       // Don't add header/footer on cover page (page 0)
       if (i === 0) continue;
 
+      // Temporarily remove bottom margin to prevent footer text from triggering automatic page breaks
+      const oldBottom = doc.page.margins.bottom;
+      doc.page.margins.bottom = 0;
+
       // Header
       doc.rect(0, 0, doc.page.width, 30).fill(colors.primary);
       doc.fillColor(colors.white).fontSize(8).font('Helvetica-Bold')
@@ -52,6 +56,9 @@ function buildPdfReport(reportData, res) {
       doc.fillColor(colors.white).fontSize(8).font('Helvetica')
          .text(`CONFIDENTIAL - INTERNAL USE ONLY`, 50, doc.page.height - 20, { width: 400, align: 'left' });
       doc.text(`Page ${i + 1} of ${pages.count}`, 50, doc.page.height - 20, { width: 500, align: 'right' });
+
+      // Restore original bottom margin
+      doc.page.margins.bottom = oldBottom;
     }
   }
 
@@ -88,6 +95,43 @@ function buildPdfReport(reportData, res) {
      .text(`Assessment Date: ${new Date(reportData.scanTime).toUTCString()}`, 50, 515)
      .text(`Scan Duration: ${(reportData.scanDurationMs / 1000).toFixed(2)} seconds`, 50, 530)
      .text(`Scanner Build: WAPT-Engine v2.0-Production`, 50, 545);
+
+  doc.addPage();
+
+  // ==========================================
+  // PAGE 2: TABLE OF CONTENTS (INDEX)
+  // ==========================================
+  sectionHeader('Table of Contents (Index)');
+  doc.fontSize(10).font('Helvetica').fillColor(colors.text)
+     .text('This index provides a map of the verification parts and security metrics compiled in this corporate assessment document:', { lineGap: 3 });
+  
+  doc.moveDown(1.5);
+  
+  const tocItems = [
+    { title: '1. Executive Summary', page: '3', desc: 'Summary of security posture score, threat risk levels, and identified findings count.' },
+    { title: '2. Assessment Scope & Discovery Metrics', page: '4', desc: 'Granular details of discovered assets, portals, and technologies fingerprinted.' },
+    { title: '3. Security Coverage Analysis', page: '5', desc: 'Detailed breakdown of testing depth, categories audited, and scanner confidence levels.' },
+    { title: '4. Attack Path Correlation', page: '6', desc: 'Exploit chain correlations mapping multi-flaw exploit routes identified.' },
+    { title: '5. Threat Risk Matrix & Remediation Roadmap', page: '7', desc: 'Likelihood vs Impact assessment matrix and short/long-term action-item roadmaps.' },
+    { title: '6. Detailed Technical Findings', page: '8', desc: 'Per-vulnerability raw HTTP evidence, detection logic details, and AI compensating controls.' },
+    { title: '7. OWASP Status Rework & Benchmark Verification', page: 'Last Page', desc: 'OWASP Top 10 5-state compliance table and accuracy ratings against industry testbeds.' }
+  ];
+
+  let tocY = doc.y;
+  tocItems.forEach((item) => {
+    doc.fontSize(10).font('Helvetica-Bold').fillColor(colors.primary).text(item.title, 50, tocY);
+    doc.fontSize(10).font('Helvetica-Bold').fillColor(colors.accent).text(item.page, 480, tocY, { align: 'right', width: 50 });
+    
+    // Draw dot leaders
+    doc.fontSize(9).font('Helvetica').fillColor(colors.textLight)
+       .text('. '.repeat(55), 180, tocY - 1, { width: 300 });
+
+    doc.fontSize(8.5).font('Helvetica').fillColor(colors.text)
+       .text(item.desc, 65, tocY + 14, { width: 450 });
+    
+    doc.moveDown(0.3);
+    tocY = doc.y + 10;
+  });
 
   doc.addPage();
 
@@ -441,10 +485,61 @@ function buildPdfReport(reportData, res) {
     doc.fontSize(10).font('Helvetica').fillColor(colors.text).text('No findings observed in this scan.');
   } else {
     findings.forEach((f, index) => {
-      // Check page break room
-      if (doc.y > 600) {
+      // Set actual font size and family before calculating description height
+      doc.fontSize(8.5).font('Helvetica');
+      const titleHeight = 25;
+      const descHeight = doc.heightOfString(`Observation: ${f.observation || f.description || 'N/A'}`, { width: 490, lineGap: 2 });
+      
+      // Metadata Grid height (measured using grid's exact font)
+      doc.fontSize(7.5).font('Helvetica-Bold');
+      const h1 = doc.heightOfString(`OWASP Category: ${f.owasp || 'N/A'}`, { width: 220 });
+      const h2 = doc.heightOfString(`CWE Code: ${f.cwe || 'N/A'}`, { width: 220 });
+      const h3 = doc.heightOfString(`ASVS Reference: ${f.asvs || 'N/A'}`, { width: 220 });
+      const leftHeight = h1 + h2 + h3 + 6;
+
+      const r1 = doc.heightOfString(`CVSS v3.1 Score: ${f.cvss || 'N/A'}`, { width: 220 });
+      const r2 = doc.heightOfString(`Detection Confidence: ${f.detectionConfidence || 100}%`, { width: 220 });
+      const r3 = doc.heightOfString(`Risk Confidence: ${f.riskConfidence || 50}%`, { width: 220 });
+      const rightHeight = r1 + r2 + r3 + 6;
+      const gridHeight = Math.max(leftHeight, rightHeight) + 12;
+
+      // Other texts height (measured using actual fonts/sizes)
+      doc.fontSize(8).font('Helvetica-Bold');
+      const logicTitleHeight = doc.heightOfString('Detection Logic:');
+      doc.fontSize(7.5).font('Helvetica');
+      const logicTextHeight = doc.heightOfString(f.detectionLogic || 'Passively analyze response content or headers.', { width: 490, lineGap: 1.5 });
+      const logicHeight = logicTitleHeight + logicTextHeight + 10;
+
+      doc.fontSize(8).font('Helvetica-Bold');
+      const aiTitleHeight = doc.heightOfString('AI Analysis & Compensating Controls:');
+      doc.fontSize(7.5).font('Helvetica');
+      const aiTextHeight = doc.heightOfString(f.aiAnalysis || 'No advanced insights compiled.', { width: 490, lineGap: 1.5 });
+      const aiHeight = aiTitleHeight + aiTextHeight + 10;
+
+      doc.fontSize(8).font('Helvetica-Bold');
+      const fpTitleHeight = doc.heightOfString('Auditor / False Positive Review:');
+      doc.fontSize(7.5).font('Helvetica');
+      const fpTextHeight = doc.heightOfString(f.falsePositiveAssessment || 'No mitigations observed.', { width: 490, lineGap: 1.5 });
+      const fpHeight = fpTitleHeight + fpTextHeight + 10;
+
+      // Evidence box height
+      const evidenceContent = [];
+      if (f.rawRequest) evidenceContent.push(`--- RAW HTTP REQUEST ---\n${f.rawRequest.substring(0, 400)}`);
+      if (f.rawResponse) evidenceContent.push(`--- RAW HTTP RESPONSE ---\n${f.rawResponse.substring(0, 400)}`);
+      const evidenceStr = evidenceContent.join('\n\n');
+      const evidenceBoxHeight = (f.rawRequest || f.rawResponse) ? Math.min(100, Math.round(evidenceStr.split('\n').length * 8.5) + 12) + 15 : 0;
+      
+      doc.fontSize(8).font('Helvetica-Bold');
+      const remedTitleHeight = doc.heightOfString('Suggested Remediation:');
+      doc.fontSize(7.5).font('Helvetica');
+      const remedTextHeight = doc.heightOfString(f.remediation || 'Maintain standard hardened setups.', { width: 490, lineGap: 1.5 });
+      const remedHeight = remedTitleHeight + remedTextHeight + 15;
+
+      const totalHeight = titleHeight + descHeight + gridHeight + logicHeight + aiHeight + fpHeight + evidenceBoxHeight + remedHeight + 40;
+
+      // Start new page if the entire block does not fit on the current page
+      if (doc.y + totalHeight > 720 && doc.y > 60) {
         doc.addPage();
-        doc.y = 50; // top margin
       }
 
       const fTop = doc.y;
@@ -463,17 +558,28 @@ function buildPdfReport(reportData, res) {
       // Metadata Grid in finding
       doc.moveDown(0.4);
       const gridTop = doc.y;
-      doc.rect(50, gridTop, 490, 36).fill('#f8fafc');
-      doc.fillColor(colors.primary).fontSize(7.5).font('Helvetica-Bold');
-      doc.text(`OWASP Category: ${f.owasp || 'N/A'}`, 60, gridTop + 5, { width: 220 });
-      doc.text(`CWE Code: ${f.cwe || 'N/A'}`, 60, gridTop + 14, { width: 220 });
-      doc.text(`ASVS Reference: ${f.asvs || 'N/A'}`, 60, gridTop + 23, { width: 220 });
 
-      doc.text(`CVSS v3.1 Score: ${f.cvss || 'N/A'}`, 300, gridTop + 5, { width: 220 });
-      doc.text(`Detection Confidence: ${f.detectionConfidence || 100}%`, 300, gridTop + 14, { width: 220 });
-      doc.text(`Risk Confidence: ${f.riskConfidence || 50}%`, 300, gridTop + 23, { width: 220 });
+      // Draw background box
+      doc.rect(50, gridTop, 490, gridHeight).fill('#f8fafc');
+
+      // Print columns line-by-line relatively
+      doc.fillColor(colors.primary).fontSize(7.5).font('Helvetica-Bold');
       
-      doc.y = gridTop + 42;
+      // Left Column
+      doc.text(`OWASP Category: ${f.owasp || 'N/A'}`, 60, gridTop + 6, { width: 220 });
+      const y1 = doc.y;
+      doc.text(`CWE Code: ${f.cwe || 'N/A'}`, 60, y1 + 3, { width: 220 });
+      const y2 = doc.y;
+      doc.text(`ASVS Reference: ${f.asvs || 'N/A'}`, 60, y2 + 3, { width: 220 });
+
+      // Right Column
+      doc.text(`CVSS v3.1 Score: ${f.cvss || 'N/A'}`, 300, gridTop + 6, { width: 220 });
+      const ry1 = doc.y;
+      doc.text(`Detection Confidence: ${f.detectionConfidence || 100}%`, 300, ry1 + 3, { width: 220 });
+      const ry2 = doc.y;
+      doc.text(`Risk Confidence: ${f.riskConfidence || 50}%`, 300, ry2 + 3, { width: 220 });
+
+      doc.y = gridTop + gridHeight + 8;
 
       // Detection Logic
       doc.fontSize(8).font('Helvetica-Bold').fillColor(colors.primary).text('Detection Logic:');
@@ -495,23 +601,7 @@ function buildPdfReport(reportData, res) {
         doc.fontSize(8).font('Helvetica-Bold').fillColor(colors.primary).text('Evidence (HTTP):');
         doc.moveDown(0.25);
         
-        const evidenceContent = [];
-        if (f.rawRequest) {
-          evidenceContent.push(`--- RAW HTTP REQUEST ---\n${f.rawRequest.substring(0, 400)}`);
-        }
-        if (f.rawResponse) {
-          evidenceContent.push(`--- RAW HTTP RESPONSE ---\n${f.rawResponse.substring(0, 400)}`);
-        }
-        const evidenceStr = evidenceContent.join('\n\n');
-
         const boxHeight = Math.min(100, Math.round(evidenceStr.split('\n').length * 8.5) + 12);
-        
-        // Check page overflow for evidence box
-        if (doc.y + boxHeight > 620) {
-          doc.addPage();
-          doc.y = 50;
-        }
-
         const boxTop = doc.y;
         doc.rect(50, boxTop, 490, boxHeight).fill('#1e293b');
         doc.fillColor('#38bdf8').fontSize(6.5).font('Courier')
@@ -530,7 +620,9 @@ function buildPdfReport(reportData, res) {
   // ==========================================
   // PAGE N+1: COMPLIANCE STATUS INDEX & BENCHMARKS
   // ==========================================
-  doc.addPage();
+  if (doc.y > 60) {
+    doc.addPage();
+  }
   sectionHeader('7. OWASP Status Rework & Benchmark Verification');
 
   // OWASP Status Table

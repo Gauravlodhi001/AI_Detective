@@ -265,9 +265,9 @@ function createFinding({
 // ==========================================================================
 
 // 1. checkSecurityHeaders
-async function checkSecurityHeaders(baseUrl, log) {
+async function checkSecurityHeaders(baseUrl, log, authHeaders = {}) {
   log.push('[WAPT] Running checkSecurityHeaders...');
-  const res = await request(baseUrl);
+  const res = await request(baseUrl, { headers: authHeaders });
   if (res.status === 0) {
     return [createFinding({
       title: 'Target Unreachable during Headers check',
@@ -565,16 +565,16 @@ async function checkSecurityHeaders(baseUrl, log) {
 }
 
 // 2. checkHttpMethods
-async function checkHttpMethods(baseUrl, log) {
+async function checkHttpMethods(baseUrl, log, authHeaders = {}) {
   log.push('[WAPT] Running checkHttpMethods...');
   const methods = ['PUT', 'DELETE', 'TRACE', 'CONNECT', 'PATCH'];
   const findings = [];
 
   // Request the baseline GET response to identify routing engine method-bypass/fallbacks
-  const getRes = await request(baseUrl, { method: 'GET' });
+  const getRes = await request(baseUrl, { method: 'GET', headers: authHeaders });
   const getBodyLength = getRes.body ? getRes.body.length : 0;
 
-  const promises = methods.map(method => request(baseUrl, { method }));
+  const promises = methods.map(method => request(baseUrl, { method, headers: authHeaders }));
   const results = await Promise.all(promises);
 
   results.forEach((res, i) => {
@@ -712,7 +712,7 @@ async function checkHttpMethods(baseUrl, log) {
 }
 
 // 3. checkSslTls
-async function checkSslTls(baseUrl, log, redirectedToHttps, redirectInfo) {
+async function checkSslTls(baseUrl, log, redirectedToHttps, redirectInfo, authHeaders = {}) {
   log.push('[WAPT] Running checkSslTls...');
   const findings = [];
   const isHttps = baseUrl.startsWith('https://');
@@ -746,7 +746,7 @@ async function checkSslTls(baseUrl, log, redirectedToHttps, redirectInfo) {
     let resHttp = null;
 
     while (redirectsFollowed < 3) {
-      resHttp = await request(currentUrl, { timeout: 4000 });
+      resHttp = await request(currentUrl, { timeout: 4000, headers: authHeaders });
       if (resHttp.status >= 300 && resHttp.status < 400) {
         const location = resHttp.headers['location'] || '';
         if (location.startsWith('https://')) {
@@ -792,7 +792,7 @@ async function checkSslTls(baseUrl, log, redirectedToHttps, redirectInfo) {
   }
 
   // Check HSTS headers
-  const res = await request(isHttps ? baseUrl : baseUrl.replace('http://', 'https://'));
+  const res = await request(isHttps ? baseUrl : baseUrl.replace('http://', 'https://'), { headers: authHeaders });
   if (res.status > 0) {
     const hsts = res.headers['strict-transport-security'] || '';
     if (hsts) {
@@ -852,7 +852,7 @@ async function checkSslTls(baseUrl, log, redirectedToHttps, redirectInfo) {
 }
 
 // 4. checkDirectoryEnumeration
-async function checkDirectoryEnumeration(baseUrl, log) {
+async function checkDirectoryEnumeration(baseUrl, log, authHeaders = {}) {
   log.push('[WAPT] Running checkDirectoryEnumeration...');
   const paths = [
     '/.git/HEAD', '/.env', '/config.php', '/wp-config.php', '/web.config', '/phpinfo.php',
@@ -874,7 +874,7 @@ async function checkDirectoryEnumeration(baseUrl, log) {
   log.push('[WAPT] Performing wildcard 404 baseline check...');
   const randomStr = Math.random().toString(36).substring(2, 15);
   const baseline404Url = `${origin}/non-existent-path-${randomStr}`;
-  const baseline404 = await request(baseline404Url);
+  const baseline404 = await request(baseline404Url, { headers: authHeaders });
   const baselineStatus = baseline404.status;
   const baselineBody = baseline404.body || '';
   const baselineLength = baselineBody.length;
@@ -883,7 +883,7 @@ async function checkDirectoryEnumeration(baseUrl, log) {
 
   const promises = paths.map(path => {
     const target = `${origin}${path}`;
-    return request(target).then(res => ({ path, target, res }));
+    return request(target, { headers: authHeaders }).then(res => ({ path, target, res }));
   });
   const results = await Promise.all(promises);
 
@@ -990,7 +990,7 @@ async function checkDirectoryEnumeration(baseUrl, log) {
 }
 
 // 5. checkXss
-async function checkXss(baseUrl, log) {
+async function checkXss(baseUrl, log, authHeaders = {}) {
   log.push('[WAPT] Running checkXss...');
   const params = ['q', 'search', 'name', 'input'];
   const payload = '<script>alert("XSS-AI-Detective")</script>';
@@ -1005,7 +1005,7 @@ async function checkXss(baseUrl, log) {
     } catch (e) {
       testUrl = `${baseUrl}?${param}=${encodeURIComponent(payload)}`;
     }
-    return request(testUrl).then(res => ({ param, testUrl, res }));
+    return request(testUrl, { headers: authHeaders }).then(res => ({ param, testUrl, res }));
   });
 
   const results = await Promise.all(promises);
@@ -1069,7 +1069,7 @@ async function checkXss(baseUrl, log) {
 }
 
 // 6. checkSqlInjection
-async function checkSqlInjection(baseUrl, log) {
+async function checkSqlInjection(baseUrl, log, authHeaders = {}) {
   log.push('[WAPT] Running checkSqlInjection...');
   const params = ['id', 'user', 'username', 'query', 'q', 'search', 'product'];
   const probes = ["'", "1' OR '1'='1", "1 AND 1=1--", "' OR 1=1--"];
@@ -1097,7 +1097,7 @@ async function checkSqlInjection(baseUrl, log) {
     }
   }
 
-  const promises = tests.map(t => request(t.testUrl).then(res => ({ ...t, res })));
+  const promises = tests.map(t => request(t.testUrl, { headers: authHeaders }).then(res => ({ ...t, res })));
   const results = await Promise.all(promises);
 
   const flaggedParams = new Set();
@@ -1167,7 +1167,7 @@ async function checkSqlInjection(baseUrl, log) {
 }
 
 // 7. checkOpenRedirect
-async function checkOpenRedirect(baseUrl, log) {
+async function checkOpenRedirect(baseUrl, log, authHeaders = {}) {
   log.push('[WAPT] Running checkOpenRedirect...');
   const params = ['redirect', 'next', 'url', 'goto', 'return', 'returnUrl', 'callback', 'continue'];
   const payload = 'https://evil.example.com';
@@ -1182,7 +1182,7 @@ async function checkOpenRedirect(baseUrl, log) {
     } catch (e) {
       testUrl = `${baseUrl}?${param}=${encodeURIComponent(payload)}`;
     }
-    return request(testUrl).then(res => ({ param, testUrl, res }));
+    return request(testUrl, { headers: authHeaders }).then(res => ({ param, testUrl, res }));
   });
 
   const results = await Promise.all(promises);
@@ -1254,11 +1254,11 @@ async function checkOpenRedirect(baseUrl, log) {
 }
 
 // 8. checkCors
-async function checkCors(baseUrl, log) {
+async function checkCors(baseUrl, log, authHeaders = {}) {
   log.push('[WAPT] Running checkCors...');
   const findings = [];
 
-  const resBase = await request(baseUrl);
+  const resBase = await request(baseUrl, { headers: authHeaders });
   const acaoBase = resBase.headers['access-control-allow-origin'] || '';
   const acacBase = resBase.headers['access-control-allow-credentials'] || '';
 
@@ -1310,7 +1310,7 @@ async function checkCors(baseUrl, log) {
 
   const origins = ['https://evil.example.com', 'null'];
   const promises = origins.map(origin =>
-    request(baseUrl, { headers: { 'Origin': origin } }).then(res => ({ origin, res }))
+    request(baseUrl, { headers: { 'Origin': origin, ...authHeaders } }).then(res => ({ origin, res }))
   );
   const results = await Promise.all(promises);
 
@@ -1392,10 +1392,10 @@ async function checkCors(baseUrl, log) {
 }
 
 // 9. checkCookieSecurity
-async function checkCookieSecurity(baseUrl, log) {
+async function checkCookieSecurity(baseUrl, log, authHeaders = {}) {
   log.push('[WAPT] Running checkCookieSecurity...');
   const findings = [];
-  const res = await request(baseUrl);
+  const res = await request(baseUrl, { headers: authHeaders });
 
   let setCookies = res.headers['set-cookie'] || [];
   if (!Array.isArray(setCookies)) {
@@ -1525,10 +1525,10 @@ async function checkCookieSecurity(baseUrl, log) {
 }
 
 // 10. checkServerBanner
-async function checkServerBanner(baseUrl, log) {
+async function checkServerBanner(baseUrl, log, authHeaders = {}) {
   log.push('[WAPT] Running checkServerBanner...');
   const findings = [];
-  const res = await request(baseUrl);
+  const res = await request(baseUrl, { headers: authHeaders });
 
   const server = res.headers['server'] || '';
   const xpb = res.headers['x-powered-by'] || '';
@@ -2122,16 +2122,106 @@ async function resolveFinalUrl(urlStr, log) {
   };
 }
 
-async function runWaptScan(targetUrl) {
+// Helper to perform authentication login and return cookies/headers
+async function loginAndGetHeaders(baseUrl, authConfig, log) {
+  if (!authConfig || authConfig.authType === 'none') {
+    return {};
+  }
+
+  log.push(`[WAPT] Initiating Authentication sequence for type: ${authConfig.authType}`);
+  
+  if (authConfig.authType === 'header' && authConfig.staticHeaders) {
+    log.push('[WAPT] Applying static authentication headers.');
+    return authConfig.staticHeaders;
+  }
+
+  if (authConfig.authType === 'cookie' || authConfig.authType === 'jwt') {
+    const creds = authConfig.credentials || {};
+    const loginUrl = creds.loginUrl || `${baseUrl}/api/auth/login`;
+    const usernameField = creds.usernameField || 'email';
+    const passwordField = creds.passwordField || 'password';
+    const usernameValue = creds.usernameValue;
+    const passwordValue = creds.passwordValue;
+
+    if (!usernameValue || !passwordValue) {
+      log.push('[WAPT] Error: Missing username or password credentials.');
+      return {};
+    }
+
+    const payload = {
+      [usernameField]: usernameValue,
+      [passwordField]: passwordValue
+    };
+
+    log.push(`[WAPT] Sending login request to: ${loginUrl}`);
+    
+    // First try as JSON
+    let res = await request(loginUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    // If 415 or failure, try form-encoded
+    if (res.status === 415 || res.status === 400) {
+      log.push('[WAPT] JSON login failed or unsupported. Attempting form urlencoded login...');
+      const formParams = new URLSearchParams();
+      formParams.append(usernameField, usernameValue);
+      formParams.append(passwordField, passwordValue);
+      res = await request(loginUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formParams.toString()
+      });
+    }
+
+    if (res.status >= 200 && res.status < 300) {
+      if (authConfig.authType === 'cookie') {
+        const setCookieHeaders = res.headers['set-cookie'];
+        if (setCookieHeaders) {
+          const cookies = Array.isArray(setCookieHeaders) ? setCookieHeaders : [setCookieHeaders];
+          const cookiePairs = cookies.map(c => c.split(';')[0].trim()).join('; ');
+          log.push('[WAPT] Authentication successful. Session cookies captured.');
+          return { 'Cookie': cookiePairs };
+        } else {
+          log.push('[WAPT] Login returned 2xx, but no Set-Cookie headers were found.');
+        }
+      } else if (authConfig.authType === 'jwt') {
+        try {
+          const body = JSON.parse(res.body);
+          const token = body.token || body.accessToken || body.access_token || body.jwt;
+          if (token) {
+            log.push('[WAPT] Authentication successful. JWT token captured.');
+            return { 'Authorization': `Bearer ${token}` };
+          } else {
+            log.push('[WAPT] Login returned 2xx, but no token field found in response JSON.');
+          }
+        } catch (e) {
+          log.push('[WAPT] Failed to parse JSON login response for JWT token.');
+        }
+      }
+    } else {
+      log.push(`[WAPT] Login failed with status: ${res.status}. Body: ${res.body.substring(0, 100)}`);
+    }
+  }
+
+  log.push('[WAPT] Warning: Authentication failed. Falling back to anonymous scan.');
+  return {};
+}
+
+async function runWaptScan(targetUrl, authConfig = null) {
   const log = [];
   const startTime = Date.now();
 
-  log.push(`[WAPT] Initializing Passive Security Scan for: ${targetUrl}`);
+  log.push(`[WAPT] Initializing WAPT Security Scan for: ${targetUrl}`);
 
   // Resolve redirect chain to find the actual target endpoint
   const redirectInfo = await resolveFinalUrl(targetUrl, log);
   const resolvedUrl = redirectInfo.finalUrl;
   const redirectedToHttps = redirectInfo.redirectedToHttps;
+
+  // Initialize login session and retrieve authorization headers if configured
+  const authHeaders = await loginAndGetHeaders(resolvedUrl, authConfig, log);
 
   const allFindings = [];
 
@@ -2153,9 +2243,9 @@ async function runWaptScan(targetUrl) {
     const localLog = [];
     let findings;
     if (item.fn === checkSslTls) {
-      findings = await item.fn(resolvedUrl, localLog, redirectedToHttps, redirectInfo);
+      findings = await item.fn(resolvedUrl, localLog, redirectedToHttps, redirectInfo, authHeaders);
     } else {
-      findings = await item.fn(resolvedUrl, localLog);
+      findings = await item.fn(resolvedUrl, localLog, authHeaders);
     }
     return { findings, log: localLog };
   });

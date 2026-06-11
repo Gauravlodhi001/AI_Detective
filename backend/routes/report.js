@@ -3,6 +3,7 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const { buildHtmlReport, buildDocReport } = require('../parsers/report_builder');
+const { buildCodePdfReport } = require('../parsers/code_pdf_builder');
 
 const REPORTS_DIR = path.join(__dirname, '../../reports');
 
@@ -142,12 +143,39 @@ router.get('/:id/download', async (req, res, next) => {
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
       res.setHeader('Content-Disposition', `attachment; filename="${reportData.projectName}-security-report.docx"`);
       return res.send(docBuffer);
+    } else if (format === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${reportData.projectName}-security-report.pdf"`);
+      return buildCodePdfReport(reportData, res);
     } else {
       // Default: send raw JSON
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Content-Disposition', `attachment; filename="${reportData.projectName}-security-report.json"`);
       return res.send(rawContent);
     }
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @route GET /api/reports/:id/pdf
+ * @desc Download PDF report of a Semgrep/Code scan
+ */
+router.get('/:id/pdf', (req, res, next) => {
+  const jsonPath = getReportFilePath(req.params.id, 'json');
+
+  if (!fs.existsSync(jsonPath)) {
+    return res.status(404).json({ success: false, message: 'Report not found' });
+  }
+
+  try {
+    const rawContent = fs.readFileSync(jsonPath, 'utf8');
+    const reportData = JSON.parse(rawContent);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${reportData.projectName}-security-report.pdf"`);
+    return buildCodePdfReport(reportData, res);
   } catch (err) {
     next(err);
   }

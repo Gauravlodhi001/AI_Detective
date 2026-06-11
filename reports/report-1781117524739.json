@@ -1,0 +1,77 @@
+{
+  "id": "report-1781117524739",
+  "projectName": "Corporate Pipeline Demo",
+  "scanTime": "2026-06-10T18:52:04.739Z",
+  "filesScannedCount": 1,
+  "semgrepStatus": "Active (Global Scanner)",
+  "metrics": {
+    "penaltyPoints": 24,
+    "securityScore": 76,
+    "grade": "B",
+    "rating": "Low Risk",
+    "gradeColor": "#3B82F6",
+    "severityCounts": {
+      "Critical": 2,
+      "High": 0,
+      "Medium": 1,
+      "Low": 0
+    },
+    "owaspCounts": {
+      "A02:2021-Cryptographic Failures": 2,
+      "A03:2021 - Injection": 1
+    },
+    "cweCounts": {
+      "CWE-798": 2,
+      "CWE-95": 1
+    },
+    "fileCounts": {
+      "vuln_snippet.js": 2,
+      "G:\\Projects\\AI_Detective\\uploads\\paste-1781117524731\\vuln_snippet.js": 1
+    },
+    "topIssueCategory": "A02:2021"
+  },
+  "findings": [
+    {
+      "id": "sec-vuln_snippet-js-3-33",
+      "rule_id": "hardcoded-secret-aws-access-key-id",
+      "title": "Hardcoded AWS Access Key ID",
+      "severity": "Critical",
+      "owasp": "A02:2021-Cryptographic Failures",
+      "cwe": "CWE-798",
+      "path": "vuln_snippet.js",
+      "line": 3,
+      "message": "A hardcoded AWS Access Key ID was detected. Anyone with access to this key can potentially make API calls to your AWS account. (Found: `AKIA************MPLE`)",
+      "codeSnippet": "const AWS_ACCESS_KEY_ID = \"AKIAIOSFODNN7EXAMPLE\";",
+      "remediation": "Remove the hardcoded secret from your code. Store secrets in environment variables or use a secret management service (like HashiCorp Vault, AWS Secrets Manager, or dotenv files configured in .gitignore).",
+      "suggestedDiff": "<<<< CURRENT CODE\nconst AWS_ACCESS_KEY_ID = \"AKIAIOSFODNN7EXAMPLE\";\n==== SUGGESTED FIX\n// Read from environment variable or configuration service\nconst secretValue = process.env.API_KEY || \"\";\n>>>>"
+    },
+    {
+      "id": "sec-vuln_snippet-js-4-37",
+      "rule_id": "hardcoded-secret-aws-secret-access-key",
+      "title": "Hardcoded AWS Secret Access Key",
+      "severity": "Critical",
+      "owasp": "A02:2021-Cryptographic Failures",
+      "cwe": "CWE-798",
+      "path": "vuln_snippet.js",
+      "line": 4,
+      "message": "A hardcoded AWS Secret Access Key was detected. Combined with an Access Key ID, this grants full programmatic access to AWS resources. (Found: `wJal********************************EKEY`)",
+      "codeSnippet": "const AWS_SECRET_ACCESS_KEY = \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\";",
+      "remediation": "Remove the hardcoded secret from your code. Store secrets in environment variables or use a secret management service (like HashiCorp Vault, AWS Secrets Manager, or dotenv files configured in .gitignore).",
+      "suggestedDiff": "<<<< CURRENT CODE\nconst AWS_SECRET_ACCESS_KEY = \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\";\n==== SUGGESTED FIX\n// Read from environment variable or configuration service\nconst secretValue = process.env.API_KEY || \"\";\n>>>>"
+    },
+    {
+      "id": "sem-javascript-browser-security-eval-detected-eval-detected-0-17",
+      "rule_id": "javascript.browser.security.eval-detected.eval-detected",
+      "title": "Eval Detected",
+      "severity": "Medium",
+      "owasp": "A03:2021 - Injection",
+      "cwe": "CWE-95",
+      "path": "G:\\Projects\\AI_Detective\\uploads\\paste-1781117524731\\vuln_snippet.js",
+      "line": 17,
+      "message": "Detected the use of eval(). eval() can be dangerous if used to evaluate dynamic content. If this content can be input from outside the program, this may be a code injection vulnerability. Ensure evaluated content is not definable by external sources.",
+      "codeSnippet": "requires login",
+      "remediation": "Implement sanitization/validation on input parameters. Restrict function permissions or update vulnerable implementation blocks.",
+      "suggestedDiff": "<<<< CURRENT CODE\n// Vulnerable: eval() execution of dynamic strings\neval(userInput);\n==== SUGGESTED FIX\n// Use JSON.parse or strict map lookups instead of dynamic code\nconst data = JSON.parse(userInput);\n>>>>"
+    }
+  ]
+}

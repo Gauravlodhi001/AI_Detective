@@ -277,6 +277,9 @@
             <button class="btn btn-secondary btn-sm" onclick="exportReport('json')">
               <i class="fa-solid fa-brackets-curly"></i> JSON
             </button>
+            <button class="btn btn-secondary btn-sm" onclick="exportReport('pdf')" style="background: rgba(244, 63, 94, 0.1); border-color: rgba(244, 63, 94, 0.2); color: #f43f5e;">
+              <i class="fa-solid fa-file-pdf"></i> Export PDF
+            </button>
             <button class="btn btn-primary btn-sm" onclick="exportReport('doc')">
               <i class="fa-solid fa-file-word"></i> Export Word (DOC)
             </button>
@@ -538,6 +541,51 @@
               <div class="form-group mt-15">
                 <label for="wapt-url-input">Target Web Application URL</label>
                 <input type="url" id="wapt-url-input" placeholder="https://example.com" required>
+              </div>
+
+              <!-- Gray Box Auth Configuration -->
+              <div class="form-group mt-15">
+                <label for="wapt-auth-type">Authentication Method (Gray Box)</label>
+                <select id="wapt-auth-type" class="form-control" onchange="toggleWaptAuthFields(this.value)" style="width:100%; padding:8px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:6px; color:var(--text-color);">
+                  <option value="none">None (Anonymous Black Box)</option>
+                  <option value="cookie">Session Cookie Auth (Form Login)</option>
+                  <option value="jwt">JWT Token Auth (Form Login)</option>
+                  <option value="header">Static Header Auth (Custom Token)</option>
+                </select>
+              </div>
+
+              <div id="wapt-auth-creds-fields" style="display:none; border:1px dashed var(--border-color); padding:12px; border-radius:6px; margin-top:10px;">
+                <div class="form-group">
+                  <label for="wapt-auth-loginurl" style="font-size:11.5px;">Login Endpoint URL</label>
+                  <input type="url" id="wapt-auth-loginurl" placeholder="e.g. https://example.com/api/login" style="width:100%; padding:6px; font-size:12px;">
+                </div>
+                <div class="form-group mt-10" style="display:flex; gap:10px;">
+                  <div style="flex:1;">
+                    <label for="wapt-auth-userfield" style="font-size:11.5px;">Username Field Name</label>
+                    <input type="text" id="wapt-auth-userfield" value="email" style="width:100%; padding:6px; font-size:12px;">
+                  </div>
+                  <div style="flex:1;">
+                    <label for="wapt-auth-pwdfield" style="font-size:11.5px;">Password Field Name</label>
+                    <input type="text" id="wapt-auth-pwdfield" value="password" style="width:100%; padding:6px; font-size:12px;">
+                  </div>
+                </div>
+                <div class="form-group mt-10" style="display:flex; gap:10px;">
+                  <div style="flex:1;">
+                    <label for="wapt-auth-userval" style="font-size:11.5px;">Username / Email</label>
+                    <input type="text" id="wapt-auth-userval" placeholder="user@example.com" style="width:100%; padding:6px; font-size:12px;">
+                  </div>
+                  <div style="flex:1;">
+                    <label for="wapt-auth-pwdval" style="font-size:11.5px;">Password</label>
+                    <input type="password" id="wapt-auth-pwdval" placeholder="******" style="width:100%; padding:6px; font-size:12px;">
+                  </div>
+                </div>
+              </div>
+
+              <div id="wapt-auth-headers-fields" style="display:none; border:1px dashed var(--border-color); padding:12px; border-radius:6px; margin-top:10px;">
+                <div class="form-group">
+                  <label for="wapt-auth-headersjson" style="font-size:11.5px;">Static Headers (JSON Format)</label>
+                  <textarea id="wapt-auth-headersjson" placeholder='{"Authorization": "Bearer token123", "X-API-Key": "keyabc"}' style="width:100%; height:60px; padding:6px; font-size:12px; font-family:monospace; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:6px; color:var(--text-color);"></textarea>
+                </div>
               </div>
 
               <div class="form-group mt-15">

@@ -486,5 +486,229 @@
       "remediation": "Avoid hardcoding internal networks. Externalize connection parameters into dynamic environment configs.",
       "suggestedDiff": "<<<< CURRENT CODE\n\"192.168.1.1\",\n==== SUGGESTED FIX\nconst internalServiceIp = process.env.INTERNAL_SERVICE_IP;\n>>>>"
     }
-  ]
+  ],
+  "aiAnalysis": {
+    "isMock": true,
+    "executiveSummary": "### Security Posture Overview\n\nAI-Detective performed a hybrid security audit on project **Netmon2**, reviewing **975** files. The codebase has been graded **F** with a Security Posture Index of **15/100**, indicating a **Critical Risk** profile. We identified a total of **31** distinct findings across SAST checks, secret scanning, and software dependency audits.\n\nThe project exhibits multiple high-risk vectors. The discovery of and outdated packages creates a highly vulnerable environment. Immediate remediation is required to safeguard environment secrets and secure input boundaries before this application is exposed publicly.",
+    "attackNarrative": "### Chained Threat Vector Scenario\n\nA penetration tester modeled the following attack narrative demonstrating how the discovered vulnerabilities can be chained together:\n\n**Step 1: Reconnaissance & CORS Exploitation**\nAn attacker browses a malicious site. Because the target server exposes a loose CORS policy (`Access-Control-Allow-Origin: *`), the attacker can make cross-origin requests to the application from the user's browser, hijacking sessions or reading sensitive responses.\n\n**Impact Assessment:** Chaining these issues results in **Full System Compromise**, leading to data leakage, lateral movement in the private network, and resource hijacking.",
+    "remediationRanking": [
+      {
+        "id": "sem-html-security-audit-missing-integrity-missing-integrity-0-6",
+        "rank": 1,
+        "title": "Missing Integrity",
+        "location": "G:\\Projects\\AI_Detective\\uploads\\extract-1780987185249\\Netmon\\index.html:6",
+        "reasoning": "This is a Missing Integrity vulnerability in index.html. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "sem-python-fastapi-security-wildcard-cors-wildcard-cors-1-20",
+        "rank": 2,
+        "title": "Wildcard Cors",
+        "location": "G:\\Projects\\AI_Detective\\uploads\\extract-1780987185249\\Netmon\\netmon.py:20",
+        "reasoning": "This is a Wildcard Cors vulnerability in netmon.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-pip-_internal-index-collector-py-124-4",
+        "rank": 3,
+        "title": "Sensitive Data Logging",
+        "location": "Netmon/.venv/Lib/site-packages/pip/_internal/index/collector.py:124",
+        "reasoning": "This is a Sensitive Data Logging vulnerability in collector.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-pip-_internal-network-auth-py-89-12",
+        "rank": 4,
+        "title": "Sensitive Data Logging",
+        "location": "Netmon/.venv/Lib/site-packages/pip/_internal/network/auth.py:89",
+        "reasoning": "This is a Sensitive Data Logging vulnerability in auth.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-pip-_internal-network-auth-py-96-12",
+        "rank": 5,
+        "title": "Sensitive Data Logging",
+        "location": "Netmon/.venv/Lib/site-packages/pip/_internal/network/auth.py:96",
+        "reasoning": "This is a Sensitive Data Logging vulnerability in auth.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-pip-_internal-network-auth-py-279-12",
+        "rank": 6,
+        "title": "Sensitive Data Logging",
+        "location": "Netmon/.venv/Lib/site-packages/pip/_internal/network/auth.py:279",
+        "reasoning": "This is a Sensitive Data Logging vulnerability in auth.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-pip-_internal-network-auth-py-392-16",
+        "rank": 7,
+        "title": "Sensitive Data Logging",
+        "location": "Netmon/.venv/Lib/site-packages/pip/_internal/network/auth.py:392",
+        "reasoning": "This is a Sensitive Data Logging vulnerability in auth.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-pip-_internal-network-auth-py-565-16",
+        "rank": 8,
+        "title": "Sensitive Data Logging",
+        "location": "Netmon/.venv/Lib/site-packages/pip/_internal/network/auth.py:565",
+        "reasoning": "This is a Sensitive Data Logging vulnerability in auth.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-pip-_vendor-distro-distro-py-1393-8",
+        "rank": 9,
+        "title": "Sensitive Data Logging",
+        "location": "Netmon/.venv/Lib/site-packages/pip/_vendor/distro/distro.py:1393",
+        "reasoning": "This is a Sensitive Data Logging vulnerability in distro.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-starlette-1-2-1-dist-info-METADATA-111-16",
+        "rank": 10,
+        "title": "Debug Flag Enabled",
+        "location": "Netmon/.venv/Lib/site-packages/starlette-1.2.1.dist-info/METADATA:111",
+        "reasoning": "This is a Debug Flag Enabled vulnerability in METADATA. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-websockets-client-py-296-21",
+        "rank": 11,
+        "title": "Sensitive Data Logging",
+        "location": "Netmon/.venv/Lib/site-packages/websockets/client.py:296",
+        "reasoning": "This is a Sensitive Data Logging vulnerability in client.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-websockets-client-py-322-25",
+        "rank": 12,
+        "title": "Sensitive Data Logging",
+        "location": "Netmon/.venv/Lib/site-packages/websockets/client.py:322",
+        "reasoning": "This is a Sensitive Data Logging vulnerability in client.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-websockets-legacy-client-py-108-21",
+        "rank": 13,
+        "title": "Sensitive Data Logging",
+        "location": "Netmon/.venv/Lib/site-packages/websockets/legacy/client.py:108",
+        "reasoning": "This is a Sensitive Data Logging vulnerability in client.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-websockets-legacy-client-py-137-21",
+        "rank": 14,
+        "title": "Sensitive Data Logging",
+        "location": "Netmon/.venv/Lib/site-packages/websockets/legacy/client.py:137",
+        "reasoning": "This is a Sensitive Data Logging vulnerability in client.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-websockets-legacy-server-py-287-21",
+        "rank": 15,
+        "title": "Sensitive Data Logging",
+        "location": "Netmon/.venv/Lib/site-packages/websockets/legacy/server.py:287",
+        "reasoning": "This is a Sensitive Data Logging vulnerability in server.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-websockets-legacy-server-py-308-21",
+        "rank": 16,
+        "title": "Sensitive Data Logging",
+        "location": "Netmon/.venv/Lib/site-packages/websockets/legacy/server.py:308",
+        "reasoning": "This is a Sensitive Data Logging vulnerability in server.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-websockets-server-py-522-21",
+        "rank": 17,
+        "title": "Sensitive Data Logging",
+        "location": "Netmon/.venv/Lib/site-packages/websockets/server.py:522",
+        "reasoning": "This is a Sensitive Data Logging vulnerability in server.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-websockets-server-py-563-25",
+        "rank": 18,
+        "title": "Sensitive Data Logging",
+        "location": "Netmon/.venv/Lib/site-packages/websockets/server.py:563",
+        "reasoning": "This is a Sensitive Data Logging vulnerability in server.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-pip-_vendor-requests-utils-py-672-34",
+        "rank": 19,
+        "title": "Internal IP/Domain Leakage",
+        "location": "Netmon/.venv/Lib/site-packages/pip/_vendor/requests/utils.py:672",
+        "reasoning": "This is a Internal IP/Domain Leakage vulnerability in utils.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-pip-_vendor-requests-utils-py-673-35",
+        "rank": 20,
+        "title": "Internal IP/Domain Leakage",
+        "location": "Netmon/.venv/Lib/site-packages/pip/_vendor/requests/utils.py:673",
+        "reasoning": "This is a Internal IP/Domain Leakage vulnerability in utils.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-pip-_vendor-rich-highlighter-py-228-23",
+        "rank": 21,
+        "title": "Internal IP/Domain Leakage",
+        "location": "Netmon/.venv/Lib/site-packages/pip/_vendor/rich/highlighter.py:228",
+        "reasoning": "This is a Internal IP/Domain Leakage vulnerability in highlighter.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-psutil-_pslinux-py-783-29",
+        "rank": 22,
+        "title": "Internal IP/Domain Leakage",
+        "location": "Netmon/.venv/Lib/site-packages/psutil/_pslinux.py:783",
+        "reasoning": "This is a Internal IP/Domain Leakage vulnerability in _pslinux.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-psutil-7-2-2-dist-info-METADATA-273-103",
+        "rank": 23,
+        "title": "Internal IP/Domain Leakage",
+        "location": "Netmon/.venv/Lib/site-packages/psutil-7.2.2.dist-info/METADATA:273",
+        "reasoning": "This is a Internal IP/Domain Leakage vulnerability in METADATA. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-psutil-7-2-2-dist-info-METADATA-274-103",
+        "rank": 24,
+        "title": "Internal IP/Domain Leakage",
+        "location": "Netmon/.venv/Lib/site-packages/psutil-7.2.2.dist-info/METADATA:274",
+        "reasoning": "This is a Internal IP/Domain Leakage vulnerability in METADATA. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-psutil-7-2-2-dist-info-METADATA-281-68",
+        "rank": 25,
+        "title": "Internal IP/Domain Leakage",
+        "location": "Netmon/.venv/Lib/site-packages/psutil-7.2.2.dist-info/METADATA:281",
+        "reasoning": "This is a Internal IP/Domain Leakage vulnerability in METADATA. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-psutil-7-2-2-dist-info-METADATA-408-103",
+        "rank": 26,
+        "title": "Internal IP/Domain Leakage",
+        "location": "Netmon/.venv/Lib/site-packages/psutil-7.2.2.dist-info/METADATA:408",
+        "reasoning": "This is a Internal IP/Domain Leakage vulnerability in METADATA. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon--venv-Lib-site-packages-psutil-7-2-2-dist-info-METADATA-409-103",
+        "rank": 27,
+        "title": "Internal IP/Domain Leakage",
+        "location": "Netmon/.venv/Lib/site-packages/psutil-7.2.2.dist-info/METADATA:409",
+        "reasoning": "This is a Internal IP/Domain Leakage vulnerability in METADATA. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon-index-html-96-54",
+        "rank": 28,
+        "title": "Internal IP/Domain Leakage",
+        "location": "Netmon/index.html:96",
+        "reasoning": "This is a Internal IP/Domain Leakage vulnerability in index.html. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon-netmon-log-1540-33",
+        "rank": 29,
+        "title": "Internal IP/Domain Leakage",
+        "location": "Netmon/netmon.log:1540",
+        "reasoning": "This is a Internal IP/Domain Leakage vulnerability in netmon.log. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon-netmon-log-1614-33",
+        "rank": 30,
+        "title": "Internal IP/Domain Leakage",
+        "location": "Netmon/netmon.log:1614",
+        "reasoning": "This is a Internal IP/Domain Leakage vulnerability in netmon.log. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      },
+      {
+        "id": "cust-Netmon-netmon-py-29-5",
+        "rank": 31,
+        "title": "Internal IP/Domain Leakage",
+        "location": "Netmon/netmon.py:29",
+        "reasoning": "This is a Internal IP/Domain Leakage vulnerability in netmon.py. This config oversight contributes to audit compliance failures. Should be resolved before public staging."
+      }
+    ]
+  }
 }
