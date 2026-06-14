@@ -1,0 +1,230 @@
+/* ==========================================================================
+   AI-Detective Corporate Redesign - Top-Nav Header Layout
+   ========================================================================== */
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  min-height: 100vh;
+  background-color: var(--bg-primary);
+}
+
+/* Header / Top Navigation */
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 40px;
+  height: 70px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-name {
+  font-family: 'Outfit', -apple-system, sans-serif;
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: 1.5px;
+  color: var(--color-accent);
+  text-shadow: 0 0 10px rgba(255, 159, 28, 0.25);
+}
+
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+}
+
+.header-nav .nav-item {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: 'Fira Code', 'JetBrains Mono', monospace;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 12px;
+  transition: var(--transition-fast);
+  position: relative;
+  letter-spacing: 0.5px;
+  outline: none;
+}
+
+.header-nav .nav-item:hover {
+  color: var(--color-accent);
+  text-shadow: 0 0 8px rgba(255, 159, 28, 0.4);
+}
+
+.header-nav .nav-item.active {
+  color: var(--color-accent);
+  text-shadow: 0 0 10px rgba(255, 159, 28, 0.6);
+}
+
+.header-nav .nav-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: -22px; /* aligns perfectly to bottom border of header */
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: var(--color-accent);
+  box-shadow: 0 0 8px var(--color-accent);
+}
+
+.header-status {
+  display: flex;
+  align-items: center;
+}
+
+.status-badge {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  padding: 8px 14px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-family: 'Fira Code', monospace;
+  color: var(--text-muted);
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--text-subtle);
+}
+
+.status-dot.pulsing {
+  box-shadow: 0 0 0 0 rgba(255, 159, 28, 0.5);
+  animation: pulse 1.8s infinite;
+}
+
+.status-dot.active { 
+  background-color: var(--color-success); 
+  box-shadow: 0 0 6px var(--color-success);
+}
+.status-dot.error { 
+  background-color: var(--color-critical); 
+  box-shadow: 0 0 6px var(--color-critical);
+}
+.status-dot.warning { 
+  background-color: var(--color-medium); 
+  box-shadow: 0 0 6px var(--color-medium);
+}
+
+/* Main Content Wrapper */
+.main-content {
+  flex-grow: 1;
+  padding: 32px 40px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  max-width: 1360px;
+  margin: 0 auto;
+}
+
+/* Tab panes visibility */
+.tab-pane {
+  display: none;
+}
+
+.tab-pane.active {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  animation: fadeIn var(--transition-normal);
+}
+
+/* Mobile & Tablet Overrides */
+@media (max-width: 992px) {
+  .app-header {
+    flex-direction: column;
+    height: auto;
+    padding: 16px;
+    gap: 16px;
+  }
+  .header-nav {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
+  }
+  .header-nav .nav-item.active::after {
+    bottom: -4px;
+  }
+  .main-content {
+    padding: 20px;
+  }
+}
+
+/* ==========================================================================
+   3D Cockpit Layout Grid
+   ========================================================================== */
+.cockpit-grid {
+  display: grid;
+  grid-template-columns: 320px 1fr 320px;
+  gap: 16px;
+  width: 100%;
+  height: calc(100vh - 260px); /* Responsive viewport calculation excluding header/footer */
+  min-height: 520px;
+  overflow: hidden;
+}
+
+@media (max-width: 1100px) {
+  .cockpit-grid {
+    grid-template-columns: 300px 1fr;
+    height: auto;
+    overflow: visible;
+  }
+  .cockpit-right-column {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .cockpit-grid {
+    grid-template-columns: 1fr;
+    height: auto;
+    overflow: visible;
+  }
+  .cockpit-left-column {
+    height: auto;
+  }
+}
+
+.cockpit-left-column, .cockpit-right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.cockpit-left-column::-webkit-scrollbar, .cockpit-right-column::-webkit-scrollbar {
+  width: 4px;
+}
+.cockpit-left-column::-webkit-scrollbar-thumb, .cockpit-right-column::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 2px;
+}
+
+.cockpit-center-canvas {
+  background: #050505;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}

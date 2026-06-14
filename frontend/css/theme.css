@@ -1,0 +1,93 @@
+/* ==========================================================================
+   AI-Detective Corporate Redesign - Theme & Variables
+   ========================================================================== */
+
+:root {
+  /* Terminal Cyberpunk Palette */
+  --bg-primary: #0a0a0a;     /* Pure dark terminal base */
+  --bg-secondary: #121212;   /* Muted dark card surface */
+  --bg-surface: #181818;     /* Elevated components background */
+  --bg-panel: rgba(10, 10, 10, 0.8);
+  --border-color: #242424;
+  --border-focus: #ff9f1c;   /* Amber focus border */
+  
+  --text-main: #eceff1;      /* Bright terminal gray */
+  --text-muted: #888888;     /* Medium gray labels */
+  --text-subtle: #555555;    /* Dark gray indicators */
+  
+  --color-accent: #ff9f1c;         /* Orange/Amber accent */
+  --color-accent-hover: #ffb84d;   /* Lighter orange */
+  --color-indigo: #ff9f1c;         /* Unified to orange for general usage */
+  --color-indigo-hover: #ffb84d;
+  
+  /* Severity / Risk Palette */
+  --color-critical: #e74c3c;   /* Red */
+  --color-high: #ff9f1c;       /* Orange */
+  --color-medium: #ff9f1c;     /* Orange */
+  --color-low: #3498db;        /* Blue */
+  --color-success: #2ecc71;    /* Green */
+  --color-info: #3498db;       /* Blue */
+  
+  /* Layout constraints & shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.8);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.9);
+  --shadow-glow: 0 0 15px rgba(255, 159, 28, 0.15);
+  
+  --transition-fast: 0.12s ease;
+  --transition-normal: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Base resets */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-main);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(13, 148, 136, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(13, 148, 136, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(13, 148, 136, 0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bg-surface);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-subtle);
+}
