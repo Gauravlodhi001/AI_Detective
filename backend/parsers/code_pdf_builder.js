@@ -293,7 +293,8 @@ function buildCodePdfReport(reportData, res) {
       const h1 = doc.heightOfString(`Rule Identifier: ${f.rule_id || 'N/A'}`, { width: 220 });
       const h2 = doc.heightOfString(`OWASP Match: ${f.owasp || 'N/A'}`, { width: 220 });
       const h3 = doc.heightOfString(`CWE Association: ${f.cwe || 'N/A'}`, { width: 220 });
-      const leftHeight = h1 + h2 + h3 + 6;
+      const h4 = f.cve ? doc.heightOfString(`CVE ID: ${f.cve}`, { width: 220 }) + 3 : 0;
+      const leftHeight = h1 + h2 + h3 + h4 + 6;
 
       const r1 = doc.heightOfString(`File Path: ${f.path || 'N/A'}`, { width: 220 });
       const r2 = doc.heightOfString(`Line Number: ${f.line || 'N/A'}`, { width: 220 });
@@ -359,6 +360,10 @@ function buildCodePdfReport(reportData, res) {
       doc.text(`OWASP Match: ${f.owasp || 'N/A'}`, 60, y1 + 3, { width: 220 });
       const y2 = doc.y;
       doc.text(`CWE Association: ${f.cwe || 'N/A'}`, 60, y2 + 3, { width: 220 });
+      const y3 = doc.y;
+      if (f.cve) {
+        doc.text(`CVE ID: ${f.cve}`, 60, y3 + 3, { width: 220 });
+      }
 
       // Right Column
       doc.text(`File Path: ${f.path || 'N/A'}`, 300, gridTop + 6, { width: 220 });

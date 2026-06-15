@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 
-// Excluded directories and file patterns to avoid performance bottlenecks and false positives
 const EXCLUDED_DIRS = new Set([
   'node_modules',
   '.git',
@@ -17,7 +16,15 @@ const EXCLUDED_DIRS = new Set([
   'out',
   'target',
   'bin',
-  'obj'
+  'obj',
+  // App-specific runtime/scratch directories - prevents self-scans from
+  // recursively scanning staged uploads, clones, past reports, and test fixtures
+  'uploads',
+  'cloned_repos',
+  'reports',
+  'scratch',
+  'test-vulnerable-project',
+  'test_apps'
 ]);
 
 const EXCLUDED_EXTENSIONS = new Set([

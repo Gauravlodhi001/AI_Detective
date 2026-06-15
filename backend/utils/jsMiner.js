@@ -9,7 +9,7 @@ class JSMiner {
     const visited = new Set();
 
     // Pattern 1: axios.method('/path') or http.post('/path')
-    const clientPattern = /(?:axios|jQuery|get|post|put|delete|patch|req|request|client|http)\.(get|post|put|delete|patch|options|head)\s*\(\s*['"`](\/(?:api|v[0-9]|auth|graphql|query|admin|user)[a-zA-Z0-9_\-\/{}\[\]:.@]+)['"`]/gi;
+    const clientPattern = /(?:axios|jQuery|get|post|put|delete|patch|req|request|client|http)\.(get|post|put|delete|patch|options|head)\s*\(\s*['"`](\/(?:api|rest|v[0-9]|auth|graphql|query|admin|user)[a-zA-Z0-9_\-\/{}\[\]:.@]+)['"`]/gi;
     
     let match;
     clientPattern.lastIndex = 0;
@@ -24,7 +24,7 @@ class JSMiner {
     }
 
     // Pattern 2: fetch('/path', { method: 'POST' }) or similar
-    const pathRegex = /(?:["'`])(\/(?:api|v[0-9]|auth|graphql|query|admin|user)[a-zA-Z0-9_\-\/{}\[\]:.@]+)(?:["'`])/g;
+    const pathRegex = /(?:["'`])(\/(?:api|rest|v[0-9]|auth|graphql|query|admin|user)[a-zA-Z0-9_\-\/{}\[\]:.@]+)(?:["'`])/g;
     pathRegex.lastIndex = 0;
     while ((match = pathRegex.exec(jsCode)) !== null) {
       const path = match[1];

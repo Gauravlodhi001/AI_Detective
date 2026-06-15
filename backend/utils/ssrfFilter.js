@@ -1,5 +1,6 @@
 const dns = require('dns').promises;
 const { URL } = require('url');
+const config = require('./config');
 
 /**
  * Checks if a given IP address belongs to a private, loopback, or link-local range.
@@ -54,10 +55,17 @@ async function validateUrlForSsrf(urlStr) {
 
     const hostname = parsedUrl.hostname;
     
+    // Check if development-only SSRF bypass is enabled
+    const allowLocal = config.NODE_ENV === 'development' && config.ALLOW_LOCAL_SCANS === 'true';
+
     // Check if it is a raw IP address first
     const ipv4Regex = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/;
     if (ipv4Regex.test(hostname)) {
       if (isPrivateIp(hostname)) {
+        if (allowLocal) {
+          console.log(`[SSRF DEV MODE] Local scan allowed for: ${urlStr}`);
+          return { isValid: true, ip: hostname };
+        }
         return { isValid: false, error: 'Access to loopback/private IP ranges is prohibited', ip: hostname };
       }
       return { isValid: true, ip: hostname };
@@ -68,6 +76,10 @@ async function validateUrlForSsrf(urlStr) {
     const ip = lookupResult.address;
 
     if (isPrivateIp(ip)) {
+      if (allowLocal) {
+        console.log(`[SSRF DEV MODE] Local scan allowed for: ${urlStr}`);
+        return { isValid: true, ip };
+      }
       return { isValid: false, error: `Domain resolves to a restricted IP: ${ip}`, ip };
     }
 

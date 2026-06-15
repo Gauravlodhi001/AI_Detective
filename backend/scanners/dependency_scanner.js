@@ -156,6 +156,7 @@ function scanDependencies(files) {
                 severity: vulnInfo.severity,
                 owasp: vulnInfo.owasp,
                 cwe: vulnInfo.cwe,
+                cve: vulnInfo.cve,
                 path: file.relativePath,
                 line: 1, // Default manifest level
                 message: `Manifest references ${pkg}@${currentVer} which contains a known vulnerability (${vulnInfo.cve}).\nDescription: ${vulnInfo.description}`,
@@ -195,6 +196,7 @@ function scanDependencies(files) {
                   severity: vulnInfo.severity,
                   owasp: vulnInfo.owasp,
                   cwe: vulnInfo.cwe,
+                  cve: vulnInfo.cve,
                   path: file.relativePath,
                   line: lineIdx + 1,
                   message: `Manifest references ${pkg}@${currentVer} which contains a known vulnerability (${vulnInfo.cve}).\nDescription: ${vulnInfo.description}`,

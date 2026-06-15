@@ -17,7 +17,7 @@ class RouteMapper {
     for (const file of files) {
       const filePath = path.join(dir, file);
       // Skip node_modules, .git, cloned_repos, uploads, reports
-      if (file === 'node_modules' || file === '.git' || file === 'cloned_repos' || file === 'uploads' || file === 'reports' || file === 'scratch') {
+      if (file === 'node_modules' || file === '.git' || file === 'cloned_repos' || file === 'uploads' || file === 'reports' || file === 'scratch' || file === 'test_apps' || file === 'test-vulnerable-project') {
         continue;
       }
       const stat = fs.statSync(filePath);

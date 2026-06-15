@@ -1,5 +1,20 @@
 const { URL } = require('url');
 
+function cleanUrlForCrawler(urlStr) {
+  try {
+    const parsed = new URL(urlStr);
+    const hash = parsed.hash;
+    let clean = urlStr.split('?')[0].split('#')[0];
+    if (hash && (hash.startsWith('#/') || hash.startsWith('#!/'))) {
+      const cleanHash = hash.split('?')[0];
+      return clean + cleanHash;
+    }
+    return clean;
+  } catch (e) {
+    return urlStr.split('?')[0].split('#')[0];
+  }
+}
+
 class RecursiveCrawler {
   constructor(log, sessionBridge) {
     this.log = log || [];
@@ -31,7 +46,7 @@ class RecursiveCrawler {
         const parsedHref = new URL(href);
         if (parsedHref.origin === origin) {
           // Same origin link
-          const cleanHref = href.split('#')[0]; // Strip hash
+          const cleanHref = cleanUrlForCrawler(href);
           found.push({ url: cleanHref, type: 'link', method: 'GET' });
         }
       } catch (e) {
@@ -109,7 +124,7 @@ class RecursiveCrawler {
         break;
       }
       const { url, depth } = queue.shift();
-      const cleanUrl = url.split('?')[0].split('#')[0];
+      const cleanUrl = cleanUrlForCrawler(url);
 
       if (this.visited.has(cleanUrl) || depth > maxDepth) continue;
       this.visited.add(cleanUrl);
@@ -144,7 +159,7 @@ class RecursiveCrawler {
 
         // Add links to queue
         for (const link of links) {
-          const cleanLink = link.split('?')[0].split('#')[0];
+          const cleanLink = cleanUrlForCrawler(link);
           if (!this.visited.has(cleanLink)) {
             queue.push({ url: link, depth: depth + 1 });
           }
@@ -189,7 +204,7 @@ class RecursiveCrawler {
         break;
       }
       const { url, depth } = queue.shift();
-      const cleanUrl = url.split('?')[0].split('#')[0];
+      const cleanUrl = cleanUrlForCrawler(url);
 
       if (this.visited.has(cleanUrl) || depth > maxDepth) continue;
       this.visited.add(cleanUrl);

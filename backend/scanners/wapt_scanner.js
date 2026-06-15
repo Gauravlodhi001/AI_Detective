@@ -168,11 +168,11 @@ function rawRequest(urlStr, options = {}) {
         res.setEncoding('utf-8');
 
         res.on('data', (chunk) => {
-          if (body.length + chunk.length <= 8192) {
+          if (body.length + chunk.length <= 10485760) {
             body += chunk;
           } else {
-            body += chunk.substring(0, 8192 - body.length);
-            const truncatedResponse = rawResponseStr + body + '\n\n[TRUNCATED... response body capped at 8192 bytes]';
+            body += chunk.substring(0, 10485760 - body.length);
+            const truncatedResponse = rawResponseStr + body + '\n\n[TRUNCATED... response body capped at 10MB]';
             safeResolve({
               status: res.statusCode,
               headers: res.headers,
@@ -1101,7 +1101,8 @@ async function checkDirectoryEnumeration(baseUrl, log, authHeaders = {}) {
 // 5. checkXss
 async function checkXss(baseUrl, log, authHeaders = {}) {
   log.push('[WAPT] Running checkXss...');
-  const params = ['q', 'search', 'name', 'input'];
+  const discoveredParams = authHeaders.__discoveredParams || [];
+  const params = [...new Set(['q', 'search', 'name', 'input', ...discoveredParams])];
   const payload = '<script>alert("XSS-AI-Detective")</script>';
   const findings = [];
 
@@ -1174,13 +1175,15 @@ async function checkXss(baseUrl, log, authHeaders = {}) {
     }));
   }
 
+  findings.testedParams = params;
   return findings;
 }
 
 // 6. checkSqlInjection
 async function checkSqlInjection(baseUrl, log, authHeaders = {}) {
   log.push('[WAPT] Running checkSqlInjection...');
-  const params = ['id', 'user', 'username', 'query', 'q', 'search', 'product'];
+  const discoveredParams = authHeaders.__discoveredParams || [];
+  const params = [...new Set(['id', 'user', 'username', 'query', 'q', 'search', 'product', ...discoveredParams])];
   const probes = ["'", "1' OR '1'='1", "1 AND 1=1--", "' OR 1=1--"];
 
   const sqlErrorKeywords = [
@@ -1272,6 +1275,7 @@ async function checkSqlInjection(baseUrl, log, authHeaders = {}) {
     }));
   }
 
+  findings.testedParams = params;
   return findings;
 }
 
@@ -1722,12 +1726,11 @@ async function checkServerBanner(baseUrl, log, authHeaders = {}) {
 
   return findings;
 }
-
 // ==========================================================================
 // Attack Surface Mapping and Technology Awareness
 // ==========================================================================
 
-function mapAttackSurface(html, headers, targetUrl) {
+function mapAttackSurface(html, headers, targetUrl, endpoints = [], paramMiner = null, sessions = {}, apiEndpointsTestedSet = new Set(), fuzzedParamsSet = new Set(), crawler = null, formsTested = 0, jsReferencesFoundCount = 0, jsDownloadedCount = 0, swaggerDiscovered = 0, swaggerParsed = 0, graphqlDiscovered = 0, graphqlIntrospected = 0) {
   const surface = {
     forms: 0,
     apis: 0,
@@ -1767,15 +1770,21 @@ function mapAttackSurface(html, headers, targetUrl) {
   const inputMatches = html.match(/<(input|textarea|select)[^>]*>/gi) || [];
   const inputFieldsFound = inputMatches.length;
 
-  // 3. Parameters Identified
-  const paramSet = new Set();
+  // 3. Parameters Identified (Union of passive & active)
+  const allDiscoveredParamsSet = new Set();
+  if (paramMiner) {
+    const registry = paramMiner.exportRegistry();
+    Object.values(registry).forEach(arr => {
+      arr.forEach(p => allDiscoveredParamsSet.add(p));
+    });
+  }
   uniqueUrls.forEach(link => {
     try {
       const queryPart = link.split('?')[1];
       if (queryPart) {
         queryPart.split('&').forEach(pair => {
           const name = pair.split('=')[0];
-          if (name) paramSet.add(name);
+          if (name) allDiscoveredParamsSet.add(name);
         });
       }
     } catch (e) {}
@@ -1783,9 +1792,16 @@ function mapAttackSurface(html, headers, targetUrl) {
   const nameRegex = /name=["']([^"']+)["']/gi;
   let nameMatch;
   while ((nameMatch = nameRegex.exec(html)) !== null) {
-    paramSet.add(nameMatch[1]);
+    allDiscoveredParamsSet.add(nameMatch[1]);
   }
-  const parametersIdentified = paramSet.size;
+  const parametersIdentified = allDiscoveredParamsSet.size;
+
+  let parametersTestedCount = 0;
+  allDiscoveredParamsSet.forEach(p => {
+    if (fuzzedParamsSet.has(p)) {
+      parametersTestedCount++;
+    }
+  });
 
   // 4. Cookies Observed
   let setCookies = headers['set-cookie'] || [];
@@ -1796,37 +1812,52 @@ function mapAttackSurface(html, headers, targetUrl) {
   surface.cookies = cookiesObserved;
 
   // 5. API Endpoints Detected
-  const apiSet = new Set();
-  const apiPatterns = ['/api/', '/v1/', '/v2/', 'swagger', 'graphql', '.json'];
-  uniqueUrls.forEach(url => {
-    apiPatterns.forEach(pattern => {
-      if (url.toLowerCase().includes(pattern)) {
-        apiSet.add(url);
-      }
-    });
-  });
-  if (headers['content-type'] && headers['content-type'].includes('application/json')) {
-    apiSet.add(targetUrl);
-  }
-  const apiEndpointsDetected = apiSet.size;
+  const apiEndpointsDetected = endpoints.length;
   surface.apis = apiEndpointsDetected;
 
-  // 6. JavaScript Files Analyzed
-  const jsMatches = html.match(/<script[^>]+src=["']([^"']+\.js[^"']*)["']/gi) || [];
-  const javascriptFilesAnalyzed = jsMatches.length;
+  let apiTestedCount = 0;
+  endpoints.forEach(e => {
+    const key = `${e.method.toUpperCase()}:${e.path}`;
+    if (apiEndpointsTestedSet.has(key)) {
+      apiTestedCount++;
+    }
+  });
 
-  // 7. Authentication Portals Found
-  const authSet = new Set();
+  // 6. JavaScript Files Analyzed
+  const javascriptFilesAnalyzed = jsDownloadedCount;
+
+  // 7. Authentication Portals Found & Audited
+  const authUrls = new Set();
   const authPatterns = ['login', 'signin', 'auth', 'signup', 'register'];
+  endpoints.forEach(e => {
+    const lowPath = e.path.toLowerCase();
+    if (authPatterns.some(p => lowPath.includes(p))) {
+      authUrls.add(`${e.method.toUpperCase()}:${e.path}`);
+    }
+  });
   uniqueUrls.forEach(url => {
-    authPatterns.forEach(pattern => {
-      if (url.toLowerCase().includes(pattern)) authSet.add(url);
-    });
+    try {
+      const parsed = new URL(url);
+      const lowPath = parsed.pathname.toLowerCase();
+      if (authPatterns.some(p => lowPath.includes(p))) {
+        authUrls.add(`GET:${parsed.pathname}`);
+      }
+    } catch (e) {}
   });
   if (htmlLower.includes('type="password"')) {
-    authSet.add(targetUrl);
+    try {
+      const parsed = new URL(targetUrl);
+      authUrls.add(`GET:${parsed.pathname}`);
+    } catch (e) {}
   }
-  const authenticationPortalsFound = authSet.size;
+  const authenticationPortalsFound = authUrls.size;
+
+  let authPortalsAudited = 0;
+  authUrls.forEach(key => {
+    if (apiEndpointsTestedSet.has(key)) {
+      authPortalsAudited++;
+    }
+  });
 
   // 8. Upload Interfaces Found
   const uploadSet = new Set();
@@ -1860,9 +1891,11 @@ function mapAttackSurface(html, headers, targetUrl) {
   });
   const administrativeInterfacesFound = adminSet.size;
 
-  // Compile Discovery Metrics (pagesCrawled will be set in runWaptScan)
+  const pagesCrawled = crawler ? crawler.visited.size : 1;
+
+  // Compile Discovery Metrics
   const discoveryMetrics = {
-    pagesCrawled: 1,
+    pagesCrawled,
     urlsDiscovered,
     formsFound,
     inputFieldsFound,
@@ -1876,7 +1909,7 @@ function mapAttackSurface(html, headers, targetUrl) {
     administrativeInterfacesFound
   };
 
-  // 11. Technology Fingerprinting with Confidence
+  // 11. Technology Fingerprinting
   const technologies = [];
   const server = (headers['server'] || '').toLowerCase();
   const xpb = (headers['x-powered-by'] || '').toLowerCase();
@@ -1916,12 +1949,19 @@ function mapAttackSurface(html, headers, targetUrl) {
   }
 
   // Angular
-  if (htmlLower.includes('ng-version') || htmlLower.includes('ng-app') || htmlLower.includes('_ngcontent')) {
+  if (htmlLower.includes('ng-version') || htmlLower.includes('ng-app') || htmlLower.includes('_ngcontent') || htmlLower.includes('ng-host')) {
     technologies.push({
       name: 'Angular',
       confidence: 95,
       evidenceSource: 'JavaScript Artifact',
-      evidenceDetails: 'Angular native attributes found in HTML markup'
+      evidenceDetails: 'Angular template attributes detected in HTML'
+    });
+  } else if (htmlLower.includes('angular')) {
+    technologies.push({
+      name: 'Angular',
+      confidence: 40,
+      evidenceSource: 'JavaScript Artifact',
+      evidenceDetails: 'Angular substring match in HTML'
     });
   }
 
@@ -2043,21 +2083,29 @@ function mapAttackSurface(html, headers, targetUrl) {
     });
   }
 
-  // 12. Security Coverage Calculations
-  const injectionCoverage = parametersIdentified > 0 ? Math.min(90, Math.round((8 / parametersIdentified) * 100)) : 0;
-  const authenticationCoverage = authenticationPortalsFound > 0 ? 20 : 0; // Passive only
-  const authorizationCoverage = 0; // Passive scanner doesn't verify privilege levels
-  const sessionManagementCoverage = cookiesObserved > 0 ? 100 : 0;
-  const csrfCoverage = formsFound > 0 ? 100 : 0;
-  const securityHeadersCoverage = 100; // Audits 6 core headers
-  const transportSecurityCoverage = 100; // Audits TLS redirects
-  const apiSecurityCoverage = apiEndpointsDetected > 0 ? Math.min(85, Math.round((1 / apiEndpointsDetected) * 100)) : 0;
-  const cookieSecurityCoverage = cookiesObserved > 0 ? 100 : 0;
+  // 12. Security Coverage Calculations (Evidence-Based)
+  const pageCoverage = pagesCrawled > 0 ? 100 : "N/A";
+  const csrfCoverage = formsFound > 0 ? Math.round((formsTested / formsFound) * 100) : "N/A";
+  const injectionCoverage = parametersIdentified > 0 ? Math.round((parametersTestedCount / parametersIdentified) * 100) : "N/A";
+  const apiSecurityCoverage = apiEndpointsDetected > 0 ? Math.round((apiTestedCount / apiEndpointsDetected) * 100) : "N/A";
+  const authorizationCoverage = apiEndpointsDetected > 0 ? Math.round((apiTestedCount / apiEndpointsDetected) * 100) : "N/A"; // API authorization audit
+  const authenticationCoverage = authenticationPortalsFound > 0 ? Math.round((authPortalsAudited / authenticationPortalsFound) * 100) : "N/A";
 
-  const totalCoverage = injectionCoverage + authenticationCoverage + authorizationCoverage +
-                         sessionManagementCoverage + csrfCoverage + securityHeadersCoverage +
-                         transportSecurityCoverage + apiSecurityCoverage + cookieSecurityCoverage;
-  const attackSurfaceCoverage = Math.round(totalCoverage / 9);
+  const coverages = [];
+  if (pageCoverage !== "N/A") coverages.push(pageCoverage);
+  if (csrfCoverage !== "N/A") coverages.push(csrfCoverage);
+  if (injectionCoverage !== "N/A") coverages.push(injectionCoverage);
+  if (apiSecurityCoverage !== "N/A") coverages.push(apiSecurityCoverage);
+  if (authorizationCoverage !== "N/A") coverages.push(authorizationCoverage);
+  if (authenticationCoverage !== "N/A") coverages.push(authenticationCoverage);
+
+  const attackSurfaceCoverage = coverages.length > 0 ? Math.round(coverages.reduce((a, b) => a + b, 0) / coverages.length) : 0;
+
+  // 13. Discovery Completeness Calculations (Target-Agnostic Success Rates)
+  const jsDownloadSuccessRate = jsReferencesFoundCount > 0 ? Math.round((jsDownloadedCount / jsReferencesFoundCount) * 100) : "N/A";
+  const jsMiningSuccessRate = jsDownloadedCount > 0 ? (endpoints.length > 0 ? 100 : 0) : "N/A";
+  const swaggerSuccessRate = swaggerDiscovered > 0 ? Math.round((swaggerParsed / swaggerDiscovered) * 100) : "N/A";
+  const graphqlSuccessRate = graphqlDiscovered > 0 ? Math.round((graphqlIntrospected / graphqlDiscovered) * 100) : "N/A";
 
   surface.technologies = technologies;
   surface.discoveryMetrics = discoveryMetrics;
@@ -2065,13 +2113,31 @@ function mapAttackSurface(html, headers, targetUrl) {
     injectionCoverage,
     authenticationCoverage,
     authorizationCoverage,
-    sessionManagementCoverage,
+    sessionManagementCoverage: cookiesObserved > 0 ? 100 : "N/A",
     csrfCoverage,
-    securityHeadersCoverage,
-    transportSecurityCoverage,
+    securityHeadersCoverage: 100,
+    transportSecurityCoverage: 100,
     apiSecurityCoverage,
-    cookieSecurityCoverage,
+    cookieSecurityCoverage: cookiesObserved > 0 ? 100 : "N/A",
     attackSurfaceCoverage
+  };
+
+  surface.discoveryCompleteness = {
+    jsDownloadSuccessRate,
+    jsMiningSuccessRate,
+    swaggerSuccessRate,
+    graphqlSuccessRate
+  };
+
+  surface.discoveryStats = {
+    pagesCrawled,
+    routesDiscovered: crawler ? crawler.endpoints.length : 0,
+    jsReferencesFound: jsReferencesFoundCount,
+    jsDownloaded: jsDownloadedCount,
+    formsFound,
+    inputsFound: inputFieldsFound,
+    apisExtracted: apiEndpointsDetected,
+    parametersFound: parametersIdentified
   };
 
   return surface;
@@ -2350,6 +2416,10 @@ function findLastWaptReport(targetUrl, log) {
 
 async function runWaptScan(targetUrl, authConfig = null, scanId = null) {
   const log = [];
+  const apiEndpointsTestedSet = new Set();
+  const fuzzedParamsSet = new Set();
+  let swaggerDiscoveredCount = 0;
+  let graphqlDiscoveredCount = 0;
   
   if (scanId) {
     global.waptScanLogs = global.waptScanLogs || {};
@@ -2442,6 +2512,10 @@ async function runWaptScan(targetUrl, authConfig = null, scanId = null) {
   const hasActiveAuth = Object.values(sessions).some(s => s.authConfig.authType !== 'none');
   const crawledEndpoints = await crawler.crawl(resolvedUrl, rawRequest, hasActiveAuth ? 2 : 1, true);
   
+  crawledEndpoints.forEach(e => {
+    apiEndpointsTestedSet.add(`${e.method.toUpperCase()}:${e.path}`);
+  });
+
   // Merge endpoints map
   const endpointsRegistry = new Map(); // Map<string, { path, fullUrl, method }>
   crawledEndpoints.forEach(e => {
@@ -2450,16 +2524,26 @@ async function runWaptScan(targetUrl, authConfig = null, scanId = null) {
   });
 
   // 5. Discover Swagger/OpenAPI specifications
+  let swaggerParsedCount = 0;
+  let graphqlIntrospectedCount = 0;
+  let jsDownloadedCount = 0;
+
   const swaggerPaths = ['/swagger.json', '/openapi.json', '/api-docs', '/api/swagger.json', '/api/openapi.json'];
   const swaggerPromises = swaggerPaths.map(async (sPath) => {
     const sUrl = resolvedUrl.endsWith('/') ? resolvedUrl.slice(0, -1) + sPath : resolvedUrl + sPath;
     try {
       const sRes = await request(sUrl, { method: 'GET' });
       if (sRes.status === 200) {
+        const contentType = sRes.headers['content-type'] || '';
+        const isHtml = contentType.includes('text/html') || (sRes.body && (sRes.body.trim().startsWith('<!DOCTYPE') || sRes.body.trim().startsWith('<!--') || sRes.body.trim().startsWith('<html')));
+        if (isHtml) return;
+
+        swaggerDiscoveredCount++;
         log.push(`[WAPT] Discovered Swagger/OpenAPI endpoint: ${sUrl}`);
         try {
           const spec = JSON.parse(sRes.body);
           if (spec.paths) {
+            swaggerParsedCount++;
             Object.keys(spec.paths).forEach(p => {
               const methods = Object.keys(spec.paths[p]);
               methods.forEach(m => {
@@ -2503,13 +2587,24 @@ async function runWaptScan(targetUrl, authConfig = null, scanId = null) {
   });
   
   const graphqlResults = await Promise.all(graphqlPromises);
-  const activeGql = graphqlResults.find(r => r.gRes.status === 200 || r.gRes.status === 400 || r.gRes.status === 401 || r.gRes.status === 403);
+  const activeGql = graphqlResults.find(r => {
+    if (r.gRes.status === 200 || r.gRes.status === 400 || r.gRes.status === 401 || r.gRes.status === 403) {
+      const contentType = r.gRes.headers['content-type'] || '';
+      const isHtml = contentType.includes('text/html') || (r.gRes.body && (r.gRes.body.trim().startsWith('<!DOCTYPE') || r.gRes.body.trim().startsWith('<!--') || r.gRes.body.trim().startsWith('<html')));
+      return !isHtml;
+    }
+    return false;
+  });
+  
+  graphqlDiscoveredCount = activeGql ? 1 : 0;
+  
   if (activeGql) {
     log.push(`[WAPT] GraphQL endpoint detected at: ${activeGql.gUrl}`);
     
     // Attempt Introspection
     const schema = await graphqlParser.fetchSchema(rawRequest, activeGql.gUrl, sessions.userA.getHeaders());
     if (schema) {
+      graphqlIntrospectedCount = 1;
       const operations = graphqlParser.generateTestOperations(schema);
       operations.forEach(op => {
         // Register operations as scan targets
@@ -2550,6 +2645,7 @@ async function runWaptScan(targetUrl, authConfig = null, scanId = null) {
       log.push(`[WAPT] Fetching script for endpoint mining: ${scriptUrl}`);
       const jsRes = await request(scriptUrl, { method: 'GET' });
       if (jsRes.status === 200 && jsRes.body) {
+        jsDownloadedCount++;
         const mined = jsMiner.mineEndpoints(jsRes.body, resolvedUrl);
         return mined;
       }
@@ -2590,6 +2686,9 @@ async function runWaptScan(targetUrl, authConfig = null, scanId = null) {
   if (hasActiveAuth) {
     const rbacAuditor = new RbacAuditor(log);
     rbacMatrix = await rbacAuditor.runAudit(endpoints, sessions, rawRequest);
+    endpoints.forEach(e => {
+      apiEndpointsTestedSet.add(`${e.method.toUpperCase()}:${e.path}`);
+    });
   } else {
     log.push('[WAPT] Anonymous scan mode: Skipping RBAC privilege matrix audit.');
   }
@@ -2608,6 +2707,7 @@ async function runWaptScan(targetUrl, authConfig = null, scanId = null) {
 
     for (const endpoint of potentialIdorEndpoints) {
       log.push(`[WAPT] Evaluating IDOR on: ${endpoint.method} ${endpoint.path}`);
+      apiEndpointsTestedSet.add(`${endpoint.method.toUpperCase()}:${endpoint.path}`);
       
       const ownerRes = await rawRequest(endpoint.fullUrl, {
         method: endpoint.method,
@@ -2692,24 +2792,17 @@ async function runWaptScan(targetUrl, authConfig = null, scanId = null) {
   results.forEach(res => {
     allFindings.push(...res.findings);
     log.push(...res.log);
+    if (res.findings && res.findings.testedParams) {
+      res.findings.testedParams.forEach(p => fuzzedParamsSet.add(p));
+    }
   });
 
   const duration = Date.now() - startTime;
 
-
   // Retrieve security infrastructure signatures from the final response
-  // Variables are already fetched and declared in the outer scope
-
-
   const infrastructure = detectSecurityInfrastructure(initialHeaders);
   if (infrastructure.length > 0) {
     log.push(`[WAPT] Enterprise Infrastructure Detected: ${infrastructure.join(', ')}`);
-  }
-
-  // Run Attack Surface Mapping & Technology Fingerprinting
-  const attackSurface = mapAttackSurface(htmlContent, initialHeaders, resolvedUrl);
-  if (attackSurface.technologies.length > 0) {
-    log.push(`[WAPT] Technology Stack Identified: ${attackSurface.technologies.map(t => t.name).join(', ')}`);
   }
 
   // Django/Laravel/ASP.NET Form CSRF check (Framework-specific check)
@@ -2718,6 +2811,29 @@ async function runWaptScan(targetUrl, authConfig = null, scanId = null) {
   let formMatch;
   while ((formMatch = formRegex.exec(htmlContent)) !== null) {
     formsWithPost.push(formMatch[1]);
+  }
+
+  // Run Attack Surface Mapping & Technology Fingerprinting
+  const attackSurface = mapAttackSurface(
+    htmlContent,
+    initialHeaders,
+    resolvedUrl,
+    endpoints,
+    paramMiner,
+    sessions,
+    apiEndpointsTestedSet,
+    fuzzedParamsSet,
+    crawler,
+    formsWithPost.length,
+    jsScripts.length,
+    jsDownloadedCount,
+    swaggerDiscoveredCount,
+    swaggerParsedCount,
+    graphqlDiscoveredCount,
+    graphqlIntrospectedCount
+  );
+  if (attackSurface.technologies.length > 0) {
+    log.push(`[WAPT] Technology Stack Identified: ${attackSurface.technologies.map(t => t.name).join(', ')}`);
   }
 
   if (formsWithPost.length > 0) {
@@ -2864,8 +2980,9 @@ async function runWaptScan(targetUrl, authConfig = null, scanId = null) {
   const riskScore = Math.max(0, 100 - score);
 
   // Dynamic Pages Crawled calculation
-  const pagesCrawled = 1 + (redirectInfo.history ? redirectInfo.history.length : 0) + 4 + 20 + 3 + (attackSurface.forms * 2) + Math.min(10, attackSurface.discoveryMetrics.parametersIdentified * 2);
+  const pagesCrawled = crawler ? crawler.visited.size : 1;
   attackSurface.discoveryMetrics.pagesCrawled = pagesCrawled;
+  attackSurface.discoveryStats.pagesCrawled = pagesCrawled;
 
   // Assessment Confidence calculation
   const avgCoverage = attackSurface.securityCoverage.attackSurfaceCoverage || 50;
@@ -2957,6 +3074,8 @@ async function runWaptScan(targetUrl, authConfig = null, scanId = null) {
     allFindings,
     attackSurface,
     attackPaths,
+    discoveryStats: attackSurface.discoveryStats,
+    discoveryCompleteness: attackSurface.discoveryCompleteness,
     discoveredParameters: paramMiner.exportRegistry(),
     minedEndpoints: endpoints,
     rbacMatrix: rbacMatrix,

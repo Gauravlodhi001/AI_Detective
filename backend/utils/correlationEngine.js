@@ -15,7 +15,7 @@ class CorrelationEngine {
     const files = fs.readdirSync(dir);
     for (const file of files) {
       const filePath = path.join(dir, file);
-      if (file === 'node_modules' || file === '.git' || file === 'cloned_repos' || file === 'uploads' || file === 'reports' || file === 'scratch') {
+      if (file === 'node_modules' || file === '.git' || file === 'cloned_repos' || file === 'uploads' || file === 'reports' || file === 'scratch' || file === 'test_apps' || file === 'test-vulnerable-project') {
         continue;
       }
       const stat = fs.statSync(filePath);

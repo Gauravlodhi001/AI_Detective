@@ -493,7 +493,8 @@ function buildPdfReport(reportData, res) {
       const h1 = doc.heightOfString(`OWASP Category: ${f.owasp || 'N/A'}`, { width: 220 });
       const h2 = doc.heightOfString(`CWE Code: ${f.cwe || 'N/A'}`, { width: 220 });
       const h3 = doc.heightOfString(`ASVS Reference: ${f.asvs || 'N/A'}`, { width: 220 });
-      const leftHeight = h1 + h2 + h3 + 6;
+      const h4 = f.cve ? doc.heightOfString(`CVE ID: ${f.cve}`, { width: 220 }) + 3 : 0;
+      const leftHeight = h1 + h2 + h3 + h4 + 6;
 
       const r1 = doc.heightOfString(`CVSS v3.1 Score: ${f.cvss || 'N/A'}`, { width: 220 });
       const r2 = doc.heightOfString(`Detection Confidence: ${f.detectionConfidence || 100}%`, { width: 220 });
@@ -579,6 +580,10 @@ function buildPdfReport(reportData, res) {
       doc.text(`CWE Code: ${f.cwe || 'N/A'}`, 60, y1 + 3, { width: 220 });
       const y2 = doc.y;
       doc.text(`ASVS Reference: ${f.asvs || 'N/A'}`, 60, y2 + 3, { width: 220 });
+      const y3 = doc.y;
+      if (f.cve) {
+        doc.text(`CVE ID: ${f.cve}`, 60, y3 + 3, { width: 220 });
+      }
  
       // Right Column
       doc.text(`CVSS v3.1 Score: ${f.cvss || 'N/A'}`, 300, gridTop + 6, { width: 220 });

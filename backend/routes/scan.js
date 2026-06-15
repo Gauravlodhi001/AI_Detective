@@ -127,7 +127,7 @@ router.post('/upload', upload.single('zipFile'), async (req, res, next) => {
     }
 
     let totalDecompressedSize = 0;
-    const MAX_TOTAL_SIZE = 1024 * 1024 * 100; // 100MB max total size
+    const MAX_TOTAL_SIZE = 1024 * 1024 * 200; // 200MB max total size
     const MAX_SINGLE_SIZE = 1024 * 1024 * 50; // 50MB max single file size
 
     // 2. Validate all entries first before writing anything
@@ -141,7 +141,7 @@ router.post('/upload', upload.single('zipFile'), async (req, res, next) => {
       }
       totalDecompressedSize += entrySize;
       if (totalDecompressedSize > MAX_TOTAL_SIZE) {
-        throw new Error(`ZIP archive total decompressed size exceeds limit of 100MB.`);
+        throw new Error(`ZIP archive total decompressed size exceeds limit of 200MB.`);
       }
 
       // Zip Slip Protection: Path traversal check

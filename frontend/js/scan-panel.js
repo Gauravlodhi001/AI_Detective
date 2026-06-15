@@ -238,3 +238,6 @@ export async function handlePasteScan(event) {
     alert('Network error scanning pasted snippet.');
   }
 }
+
+// Bind to window for HTML inline events
+window.clearConsoleLogs = clearConsoleLogs;

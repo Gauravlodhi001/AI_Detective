@@ -79,7 +79,14 @@ function runSemgrepScan(targetDir) {
     const env = getSemgrepEnv();
     // --config auto tells semgrep to use auto-discovered registry rules
     // --json prints outputs in JSON format
-    const command = `semgrep scan --config auto --json "${targetDir}"`;
+    // --exclude flags prevent self-scans from recursively scanning staged uploads,
+    // clones, past reports, and test fixtures (mirrors fileWalker.js EXCLUDED_DIRS)
+    const EXCLUDE_DIRS = [
+      'node_modules', '.git', 'uploads', 'cloned_repos', 'reports',
+      'scratch', 'test-vulnerable-project', 'test_apps'
+    ];
+    const excludeFlags = EXCLUDE_DIRS.map(dir => `--exclude "${dir}"`).join(' ');
+    const command = `semgrep scan --config auto --json ${excludeFlags} "${targetDir}"`;
 
     console.log(`Executing Semgrep: ${command}`);
 

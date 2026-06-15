@@ -64,6 +64,9 @@ function buildMarkdownReport(report) {
     md += `* **Rule ID:** \`${finding.rule_id}\`\n`;
     md += `* **File:** \`${finding.path}\` (Line ${finding.line})\n`;
     md += `* **CWE:** [${finding.cwe}](https://cwe.mitre.org/data/definitions/${finding.cwe.split('-')[1]}.html)\n`;
+    if (finding.cve) {
+      md += `* **CVE:** \`${finding.cve}\`\n`;
+    }
     md += `* **OWASP Category:** ${finding.owasp}\n`;
     if (finding.isCorrelated) {
       if (finding.endpoint) {
@@ -169,6 +172,7 @@ function buildHtmlReport(report) {
           <div class="meta-pill-row">
             <span class="meta-pill">Rule: <strong>${escapeHtml(finding.rule_id)}</strong></span>
             <span class="meta-pill">CWE: <strong>${escapeHtml(finding.cwe)}</strong></span>
+            ${finding.cve ? `<span class="meta-pill">CVE: <strong>${escapeHtml(finding.cve)}</strong></span>` : ''}
             <span class="meta-pill">OWASP: <strong>${escapeHtml(finding.owasp)}</strong></span>
           </div>
           
@@ -1172,6 +1176,15 @@ async function buildDocReport(report) {
           { text: finding.owasp }
         ]
       ];
+
+      if (finding.cve) {
+        findingMetaRows.push([
+          { text: "CVE ID:", bold: true, fill: "F1F5F9" },
+          { text: finding.cve },
+          { text: "", fill: "F1F5F9" },
+          { text: "" }
+        ]);
+      }
 
       if (finding.isCorrelated) {
         if (finding.endpoint) {

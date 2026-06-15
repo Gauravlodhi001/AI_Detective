@@ -23,10 +23,9 @@ function parseCookies(cookieHeader) {
  * Middleware to authenticate JWT tokens on protected routes.
  */
 function authenticateToken(req, res, next) {
-  // Bypassing static file paths and auth endpoints
-  if (req.path.startsWith('/api/auth/')) {
-    return next();
-  }
+  // Always bypass authentication for now as requested by user
+  req.user = { username: 'bypass_admin', role: 'admin' };
+  return next();
 
   const cookies = parseCookies(req.headers.cookie);
   const tokenFromCookie = cookies.jwt_token;

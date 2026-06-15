@@ -56,6 +56,17 @@ const SECRET_PATTERNS = [
 ];
 
 /**
+ * Known placeholder/example values that commonly appear in documentation,
+ * READMEs, SDK examples, and test fixtures. These are not real secrets and
+ * should never be reported as findings, regardless of which target codebase
+ * is being scanned.
+ */
+const KNOWN_PLACEHOLDER_SECRETS = new Set([
+  'AKIAIOSFODNN7EXAMPLE',                          // AWS docs example Access Key ID
+  'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'        // AWS docs example Secret Access Key
+]);
+
+/**
  * Masks a secret to protect it in reports while displaying the first/last characters.
  * Example: ghp_123456... -> ghp_12******56
  */
@@ -93,6 +104,10 @@ function scanSecrets(files) {
 
           while ((match = pattern.regex.exec(lineText)) !== null) {
             const rawSecret = pattern.captureGroup !== undefined ? match[pattern.captureGroup] : match[0];
+
+            // Skip known placeholder/example values (e.g. AWS docs' AKIAIOSFODNN7EXAMPLE)
+            if (KNOWN_PLACEHOLDER_SECRETS.has(rawSecret)) continue;
+
             const maskedSecret = maskSecret(rawSecret);
 
             // Reconstruct a line snippet highlighting the match

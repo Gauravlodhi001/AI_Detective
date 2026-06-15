@@ -3,6 +3,7 @@ const { z } = require('zod');
 const configSchema = z.object({
   PORT: z.coerce.number().default(3000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  ALLOW_LOCAL_SCANS: z.string().default('false'),
   JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 characters long').default('ai-detective-super-secret-key-12345-long-key-for-security'),
   CLAUDE_API_KEY: z.string().optional(),
   ADMIN_USERNAME: z.string().min(3).default('admin'),
@@ -13,6 +14,7 @@ const configSchema = z.object({
 const parseResult = configSchema.safeParse({
   PORT: process.env.PORT,
   NODE_ENV: process.env.NODE_ENV,
+  ALLOW_LOCAL_SCANS: process.env.ALLOW_LOCAL_SCANS,
   JWT_SECRET: process.env.JWT_SECRET,
   CLAUDE_API_KEY: process.env.CLAUDE_API_KEY,
   ADMIN_USERNAME: process.env.ADMIN_USERNAME,
@@ -42,6 +44,12 @@ if (config.NODE_ENV === 'production') {
     console.error('ERROR: Default REPORT_ENCRYPTION_KEY cannot be used in production.');
     process.exit(1);
   }
+}
+
+if (config.NODE_ENV === 'development' && config.ALLOW_LOCAL_SCANS === 'true') {
+  console.log('[CONFIG] SSRF Dev Scan Bypass is ENABLED.');
+} else {
+  console.log('[CONFIG] SSRF protection is ENABLED (Strict Mode).');
 }
 
 module.exports = config;
