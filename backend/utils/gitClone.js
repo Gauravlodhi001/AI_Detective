@@ -1,6 +1,7 @@
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const { URL } = require('url');
 
 /**
  * Parses the repository name from a Git URL.
@@ -30,6 +31,24 @@ function cloneRepo(gitUrl, targetDir) {
   return new Promise((resolve) => {
     const repoName = getRepoName(gitUrl);
     
+    // Validate gitUrl protocol
+    try {
+      const parsedUrl = new URL(gitUrl.trim());
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        return resolve({
+          success: false,
+          error: 'Only HTTP and HTTPS protocols are allowed for git URL cloning.',
+          repoName
+        });
+      }
+    } catch (err) {
+      return resolve({
+        success: false,
+        error: 'Invalid Git repository URL structure.',
+        repoName
+      });
+    }
+
     // Clean target directory if it somehow exists
     if (fs.existsSync(targetDir)) {
       try {
@@ -39,11 +58,10 @@ function cloneRepo(gitUrl, targetDir) {
       }
     }
 
-    const command = `git clone --depth 1 "${gitUrl}" "${targetDir}"`;
-    console.log(`Executing: ${command}`);
+    console.log(`Executing safe git clone for: ${gitUrl}`);
 
     // Set timeout to 2 minutes (120000ms) to prevent hanging on credentials prompts or huge repos
-    exec(command, { timeout: 120000 }, (error, stdout, stderr) => {
+    execFile('git', ['clone', '--depth', '1', gitUrl.trim(), targetDir], { timeout: 120000 }, (error, stdout, stderr) => {
       if (error) {
         console.error(`Git clone failed: ${error.message}`);
         return resolve({

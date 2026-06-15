@@ -78,7 +78,12 @@ export function renderFindings(findings) {
   if (!accordion) return;
   accordion.innerHTML = '';
 
-  if (!findings || findings.length === 0) {
+  const filtered = (findings || []).filter(f => {
+    const sev = String(f.severity || f.finalSeverity || '').toLowerCase();
+    return sev !== 'low' && sev !== 'info';
+  });
+
+  if (filtered.length === 0) {
     accordion.innerHTML = `
       <div class="empty-state">
         <i class="fa-solid fa-circle-check" style="color: var(--color-success); font-size: 36px;"></i>
@@ -88,7 +93,7 @@ export function renderFindings(findings) {
     return;
   }
 
-  findings.forEach((finding) => {
+  filtered.forEach((finding) => {
     const row = document.createElement('div');
     row.className = `finding-row ${finding.severity.toLowerCase()}`;
     row.dataset.severity = finding.severity.toUpperCase();

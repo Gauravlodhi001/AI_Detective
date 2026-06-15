@@ -27,6 +27,119 @@ import {
 } from './components.js';
 import { initUniverse, buildGraph } from './universe.js';
 
+export async function checkAuth() {
+  const authModal = document.getElementById('auth-modal');
+  const userProfile = document.getElementById('user-profile-info');
+  const logoutBtn = document.getElementById('logout-btn');
+  
+  try {
+    const data = await api.getDiagnostics();
+    if (data.success) {
+      if (authModal) authModal.style.display = 'none';
+      
+      const savedUser = localStorage.getItem('user');
+      if (savedUser) {
+        const user = JSON.parse(savedUser);
+        if (userProfile) {
+          userProfile.textContent = `[USER: ${user.username.toUpperCase()} (${user.role.toUpperCase()})]`;
+          userProfile.style.display = 'inline-block';
+        }
+        if (logoutBtn) logoutBtn.style.display = 'inline-block';
+      }
+      return true;
+    }
+  } catch (e) {
+    // Unauthenticated
+  }
+
+  if (authModal) authModal.style.display = 'flex';
+  if (userProfile) userProfile.style.display = 'none';
+  if (logoutBtn) logoutBtn.style.display = 'none';
+  return false;
+}
+
+export async function handleLoginSubmit() {
+  const usernameInput = document.getElementById('auth-username');
+  const passwordInput = document.getElementById('auth-password');
+  const errorMsg = document.getElementById('auth-error-msg');
+  
+  const username = usernameInput?.value || '';
+  const password = passwordInput?.value || '';
+  
+  if (!username || !password) {
+    if (errorMsg) {
+      errorMsg.textContent = 'Please enter both username and password.';
+      errorMsg.style.display = 'block';
+    }
+    return;
+  }
+  
+  try {
+    const res = await api.login(username, password);
+    if (res.success) {
+      localStorage.setItem('user', JSON.stringify(res.user));
+      window.location.reload();
+    } else {
+      if (errorMsg) {
+        errorMsg.textContent = res.message || 'Login failed.';
+        errorMsg.style.display = 'block';
+      }
+    }
+  } catch (err) {
+    if (errorMsg) {
+      errorMsg.textContent = 'Connection error or lockout. Please try again.';
+      errorMsg.style.display = 'block';
+    }
+  }
+}
+
+export async function handleRegisterSubmit() {
+  const usernameInput = document.getElementById('auth-username');
+  const passwordInput = document.getElementById('auth-password');
+  const errorMsg = document.getElementById('auth-error-msg');
+  
+  const username = usernameInput?.value || '';
+  const password = passwordInput?.value || '';
+  
+  if (!username || !password) {
+    if (errorMsg) {
+      errorMsg.textContent = 'Please enter both username and password.';
+      errorMsg.style.display = 'block';
+    }
+    return;
+  }
+  
+  try {
+    const res = await api.register(username, password);
+    if (res.success) {
+      localStorage.setItem('user', JSON.stringify(res.user));
+      window.location.reload();
+    } else {
+      if (errorMsg) {
+        errorMsg.textContent = res.message || 'Registration failed.';
+        errorMsg.style.display = 'block';
+      }
+    }
+  } catch (err) {
+    if (errorMsg) {
+      errorMsg.textContent = 'Connection error. Please try again.';
+      errorMsg.style.display = 'block';
+    }
+  }
+}
+
+export async function handleLogoutSubmit() {
+  try {
+    await api.logout();
+    localStorage.removeItem('user');
+    window.location.reload();
+  } catch (err) {
+    console.error('Logout error:', err);
+    localStorage.removeItem('user');
+    window.location.reload();
+  }
+}
+
 /**
  * Tab routing/switching handler.
  */
@@ -213,10 +326,16 @@ export async function loadDashboardData() {
     }
 
     const latestReport = sortedReports[0];
+    if (latestReport && latestReport.findings) {
+      latestReport.findings = latestReport.findings.filter(f => {
+        const sevName = String(f.severity || f.finalSeverity || '').toLowerCase();
+        return sevName !== 'low' && sevName !== 'info';
+      });
+    }
     store.set('currentReport', latestReport);
     const score = latestReport.metrics?.securityScore || 0;
     const findingsCount = latestReport.findings ? latestReport.findings.length : 0;
-    const critCount = latestReport.metrics?.severityCounts?.Critical || 0;
+    const critCount = latestReport.findings?.filter(f => (f.severity || f.finalSeverity) === 'Critical').length || 0;
     
     // Count dependencies findings
     const depCount = latestReport.findings?.filter(f => f.rule_id && f.rule_id.startsWith('outdated-package-')).length || 0;
@@ -378,7 +497,6 @@ export async function loadSavedReports() {
           <span class="badge ${m.Critical > 0 ? 'danger' : 'info'}">${m.Critical} C</span>
           <span class="badge ${m.High > 0 ? 'danger' : 'info'}">${m.High} H</span>
           <span class="badge ${m.Medium > 0 ? 'warning' : 'info'}">${m.Medium} M</span>
-          <span class="badge info">${m.Low} L</span>
         </td>
         <td>${report.filesScannedCount}</td>
         <td>${date}</td>
@@ -449,6 +567,12 @@ export async function viewReportDetails(reportId) {
  * Displays SAST reports inside viewer panel.
  */
 export function showReport(report) {
+  if (report && report.findings) {
+    report.findings = report.findings.filter(f => {
+      const sevName = String(f.severity || f.finalSeverity || '').toLowerCase();
+      return sevName !== 'low' && sevName !== 'info';
+    });
+  }
   store.set('currentReport', report);
   
   // Make the [REPORT] button visible
@@ -459,8 +583,44 @@ export function showReport(report) {
   
   switchTab('report-viewer');
 
+  // Default to 3D Cockpit sub-tab
+  switchReportSubTab('cockpit');
+
   const m = report.metrics || {};
-  const sev = m.severityCounts || { Critical: 0, High: 0, Medium: 0, Low: 0 };
+  
+  // Update report metrics toolbar
+  const toolbarProjectName = document.getElementById('report-toolbar-project-name');
+  if (toolbarProjectName) toolbarProjectName.textContent = report.projectName;
+
+  const toolbarGrade = document.getElementById('report-toolbar-grade');
+  if (toolbarGrade) {
+    toolbarGrade.textContent = m.grade || 'N/A';
+    toolbarGrade.className = `grade-badge ${m.grade?.toLowerCase() || ''}`;
+  }
+
+  const toolbarScore = document.getElementById('report-toolbar-score');
+  if (toolbarScore) {
+    toolbarScore.textContent = m.securityScore || 0;
+  }
+
+  const toolbarDate = document.getElementById('report-toolbar-date');
+  if (toolbarDate) {
+    let dateStr = '-';
+    if (report.scanTime) {
+      try {
+        dateStr = new Date(report.scanTime).toISOString().slice(0, 10);
+      } catch(e) {
+        dateStr = '-';
+      }
+    }
+    toolbarDate.textContent = dateStr;
+  }
+  const sev = {
+    Critical: (report.findings || []).filter(f => (f.severity || f.finalSeverity) === 'Critical').length,
+    High: (report.findings || []).filter(f => (f.severity || f.finalSeverity) === 'High').length,
+    Medium: (report.findings || []).filter(f => (f.severity || f.finalSeverity) === 'Medium').length,
+    Low: 0
+  };
 
   // Update cockpit badges & totals
   const totalFindings = document.getElementById('stat-total-findings');
@@ -566,11 +726,51 @@ export function showReport(report) {
 /**
  * Downloads report in requested formats.
  */
-export function exportReport(format) {
+export async function exportReport(format) {
   const currentReport = store.state.currentReport;
   if (!currentReport) return;
-  const url = api.getDownloadUrl(currentReport.id, format);
-  window.open(url, '_blank');
+  
+  try {
+    let url;
+    let defaultFilename = `security-report-${currentReport.id}.${format === 'docx' || format === 'doc' ? 'docx' : format}`;
+    if (currentReport.type === 'wapt' && format === 'pdf') {
+      url = api.getWaptPdfUrl(currentReport.id);
+      defaultFilename = `${currentReport.projectName || 'wapt'}-security-report-${currentReport.id}.pdf`;
+    } else {
+      url = api.getDownloadUrl(currentReport.id, format);
+      const ext = format === 'docx' || format === 'doc' ? 'docx' : (format === 'markdown' || format === 'md' ? 'md' : format);
+      defaultFilename = `${currentReport.projectName || 'sast'}-security-report.${ext}`;
+    }
+
+    const headers = {
+      'X-Requested-With': 'XMLHttpRequest'
+    };
+    const response = await fetch(url, { headers, credentials: 'include' });
+    if (!response.ok) {
+      throw new Error(`Failed to download report: ${response.statusText}`);
+    }
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    
+    const contentDisposition = response.headers.get('Content-Disposition');
+    let filename = defaultFilename;
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+      if (filenameMatch && filenameMatch[1]) {
+        filename = filenameMatch[1];
+      }
+    }
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(downloadUrl);
+  } catch (err) {
+    console.error('Export error:', err);
+    alert('Failed to download report: ' + err.message);
+  }
 }
 
 // AI insights helpers
@@ -589,10 +789,10 @@ export async function triggerCockpitAiAudit() {
     return;
   }
 
-  const aiBtn = document.getElementById('cockpit-ai-btn');
+  const aiBtn = document.getElementById('cockpit-ai-btn') || document.getElementById('toolbar-ai-btn');
   if (aiBtn) {
     aiBtn.disabled = true;
-    aiBtn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> RUNNING THREAT MODEL...`;
+    aiBtn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Running Threat Model...`;
   }
 
   // Clear previous modal contents
@@ -634,7 +834,11 @@ export async function triggerCockpitAiAudit() {
   } finally {
     if (aiBtn) {
       aiBtn.disabled = false;
-      aiBtn.innerHTML = `[LAUNCH AI AUDIT]`;
+      if (aiBtn.id === 'toolbar-ai-btn') {
+        aiBtn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Launch AI Audit`;
+      } else {
+        aiBtn.innerHTML = `[LAUNCH AI AUDIT]`;
+      }
     }
   }
 }
@@ -704,6 +908,51 @@ export function closeAiInsightsModal() {
   }
 }
 
+export function switchReportSubTab(tab) {
+  document.querySelectorAll('.report-subtab-pane').forEach(pane => {
+    pane.classList.remove('active');
+    pane.style.display = 'none';
+  });
+  document.querySelectorAll('.subtab-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+
+  const selectedPane = document.getElementById(`report-subtab-${tab}`);
+  if (selectedPane) {
+    selectedPane.classList.add('active');
+    selectedPane.style.display = tab === 'cockpit' ? 'flex' : 'block';
+  }
+
+  const selectedBtn = document.getElementById(`subtab-btn-${tab}`);
+  if (selectedBtn) {
+    selectedBtn.classList.add('active');
+  }
+
+  // Force chart/Three.js recalculation when switching to cockpit
+  if (tab === 'cockpit') {
+    setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+    }, 50);
+  }
+}
+
+export function toggleDownloadDropdown(event) {
+  if (event) event.stopPropagation();
+  const menu = document.getElementById('download-dropdown-menu');
+  if (menu) {
+    const isVisible = menu.style.display === 'block';
+    menu.style.display = isVisible ? 'none' : 'block';
+  }
+}
+
+// Close dropdown on click outside
+document.addEventListener('click', () => {
+  const menu = document.getElementById('download-dropdown-menu');
+  if (menu) {
+    menu.style.display = 'none';
+  }
+});
+
 // Bind methods to global scope for HTML event attributes
 window.switchTab = switchTab;
 window.switchScanMode = switchScanMode;
@@ -720,13 +969,21 @@ window.handlePasteScan = handlePasteScan;
 window.triggerCockpitAiAudit = triggerCockpitAiAudit;
 window.openAiInsightsModal = openAiInsightsModal;
 window.closeAiInsightsModal = closeAiInsightsModal;
+window.switchReportSubTab = switchReportSubTab;
+window.handleLoginSubmit = handleLoginSubmit;
+window.handleRegisterSubmit = handleRegisterSubmit;
+window.handleLogoutSubmit = handleLogoutSubmit;
 
 // Document Ready Initialization
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   setupDragAndDrop();
   initUniverse('threejs-universe-container');
-  loadDashboardData();
-  runDiagnostics();
+  
+  const authenticated = await checkAuth();
+  if (authenticated) {
+    loadDashboardData();
+    runDiagnostics();
+  }
 
   // Listen for raycaster clicks on 3D nodes
   window.addEventListener('nodeSelected', (e) => {

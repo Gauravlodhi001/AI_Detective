@@ -8,12 +8,19 @@
     "dev": "node backend/server.js"
   },
   "dependencies": {
-    "adm-zip": "^0.5.12",
-    "cors": "^2.8.5",
-    "docx": "^9.7.1",
-    "express": "^4.19.2",
-    "multer": "^1.4.5-lts.1",
-    "pdfkit": "^0.19.0"
+    "@babel/parser": "7.29.7",
+    "@babel/traverse": "7.29.7",
+    "adm-zip": "0.5.12",
+    "bcryptjs": "3.0.3",
+    "cors": "2.8.5",
+    "docx": "9.7.1",
+    "express": "4.19.2",
+    "express-rate-limit": "8.5.2",
+    "helmet": "8.2.0",
+    "jsonwebtoken": "9.0.3",
+    "multer": "1.4.5-lts.1",
+    "pdfkit": "0.19.0",
+    "zod": "4.4.3"
   },
   "author": "AI-Detective Team",
   "license": "ISC"

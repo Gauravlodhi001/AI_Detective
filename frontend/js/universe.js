@@ -345,7 +345,7 @@ export function buildGraph(report) {
         (Math.random() - 0.5) * 0.8
       );
 
-      const mesh = createNodeMesh(nodeColor, pos, 0.13);
+      const mesh = createNodeMesh(comp.type, nodeColor, pos, 0.13);
       mesh.userData = {
         type: comp.type,
         path: comp.path || '',
@@ -419,7 +419,7 @@ export function buildGraph(report) {
 
     const hasVulns = sastFiles[pathKey] && sastFiles[pathKey].length > 0;
     const nodeColor = hasVulns ? 0x2979ff : 0x06b6d4; // Blue for vulnerable code file, Cyan for clean
-    const mesh = createNodeMesh(nodeColor, pos, 0.16);
+    const mesh = createNodeMesh('sast_file', nodeColor, pos, 0.16);
     mesh.userData = {
       type: 'sast_file',
       path: pathKey,
@@ -455,7 +455,7 @@ export function buildGraph(report) {
     );
 
     const nodeColor = 0xffd600; // Yellow for vulnerable dependency
-    const mesh = createNodeMesh(nodeColor, pos, 0.14);
+    const mesh = createNodeMesh('sca', nodeColor, pos, 0.14);
     mesh.userData = {
       type: 'sca',
       name: pkgName,
@@ -483,7 +483,7 @@ export function buildGraph(report) {
 
     const hasVulns = waptEndpoints.has(endpointKey);
     const nodeColor = hasVulns ? 0xea580c : 0x10b981; // Orange for vulnerable routes, Green for clean
-    const mesh = createNodeMesh(nodeColor, pos, 0.18);
+    const mesh = createNodeMesh('wapt', nodeColor, pos, 0.18);
     mesh.userData = {
       type: 'wapt',
       endpoint: endpointKey,
@@ -547,8 +547,22 @@ export function buildGraph(report) {
 /**
  * Creates a standard node mesh sphere.
  */
-function createNodeMesh(color, pos, size) {
-  const geo = new THREE.SphereGeometry(size, 16, 16);
+function createNodeMesh(type, color, pos, size) {
+  let geo;
+  if (type === 'sast_file') {
+    // Thin rectangle box representing a document page/file
+    geo = new THREE.BoxGeometry(size * 1.5, size * 2.0, size * 0.12);
+  } else if (type === 'sca') {
+    // Perfect cube representing a library package block
+    geo = new THREE.BoxGeometry(size * 1.3, size * 1.3, size * 1.3);
+  } else if (type === 'wapt') {
+    // Disc/Cylinder representing a dynamic target endpoint
+    geo = new THREE.CylinderGeometry(size * 1.0, size * 1.0, size * 0.4, 16);
+  } else {
+    // Fallback sphere
+    geo = new THREE.SphereGeometry(size, 16, 16);
+  }
+  
   const mat = new THREE.MeshPhongMaterial({
     color: color,
     emissive: color,
@@ -559,6 +573,18 @@ function createNodeMesh(color, pos, size) {
   });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.copy(pos);
+  
+  // Give files and WAPT nodes a slight random orientation to look organic in 3D space
+  if (type === 'sast_file') {
+    mesh.rotation.set(
+      (Math.random() - 0.5) * 0.3,
+      (Math.random() - 0.5) * 0.3,
+      (Math.random() - 0.5) * 0.2
+    );
+  } else if (type === 'wapt') {
+    mesh.rotation.x = Math.PI / 2; // Flat disc orientation facing screen
+  }
+  
   mesh.userData.originalEmissiveIntensity = 0.6;
   return mesh;
 }

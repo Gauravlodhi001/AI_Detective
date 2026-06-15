@@ -16,11 +16,11 @@ export function renderSeverityChart(sev) {
   const severityChart = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: ['Critical', 'High', 'Medium', 'Low'],
+      labels: ['Critical', 'High', 'Medium'],
       datasets: [{
         label: 'Issues Count',
-        data: [sev.Critical || 0, sev.High || 0, sev.Medium || 0, sev.Low || 0],
-        backgroundColor: ['#e11d48', '#ea580c', '#d97706', '#2563eb'],
+        data: [sev.Critical || 0, sev.High || 0, sev.Medium || 0],
+        backgroundColor: ['#e11d48', '#ea580c', '#d97706'],
         borderWidth: 0,
         borderRadius: 4
       }]

@@ -8,6 +8,9 @@ const { scanSecrets } = require('../scanners/secret_scanner');
 const { scanCustomRules } = require('../scanners/custom_scanner');
 const { scanDependencies } = require('../scanners/dependency_scanner');
 const { evaluateRisk } = require('../utils/riskEngine');
+const { RouteMapper } = require('../utils/routeMapper');
+const { CorrelationEngine } = require('../utils/correlationEngine');
+const { encrypt } = require('../utils/crypto');
 
 /**
  * Builds a markdown content representing the executive/developer vulnerability report.
@@ -31,7 +34,6 @@ function buildMarkdownReport(report) {
   md += `| 🔴 Critical | ${sev.Critical} |\n`;
   md += `| 🟠 High | ${sev.High} |\n`;
   md += `| 🟡 Medium | ${sev.Medium} |\n`;
-  md += `| 🔵 Low | ${sev.Low} |\n`;
   md += `| **Total** | **${report.findings.length}** |\n\n`;
 
   md += `### Primary OWASP Theme: ${m.topIssueCategory}\n\n`;
@@ -62,11 +64,28 @@ function buildMarkdownReport(report) {
     md += `* **Rule ID:** \`${finding.rule_id}\`\n`;
     md += `* **File:** \`${finding.path}\` (Line ${finding.line})\n`;
     md += `* **CWE:** [${finding.cwe}](https://cwe.mitre.org/data/definitions/${finding.cwe.split('-')[1]}.html)\n`;
-    md += `* **OWASP Category:** ${finding.owasp}\n\n`;
+    md += `* **OWASP Category:** ${finding.owasp}\n`;
+    if (finding.isCorrelated) {
+      if (finding.endpoint) {
+        md += `* **Exposed URL:** \`${finding.endpointMethod} ${finding.endpointPath}\`\n`;
+        md += `* **Controller Handler:** \`${finding.handler || 'inline'}()\` (lines ${finding.codeLocation ? (finding.codeLocation.lineStart + '-' + finding.codeLocation.lineEnd) : 'N/A'})\n`;
+      } else if (finding.codeLocation) {
+        md += `* **Controller File:** \`${finding.codeLocation.file}\` (lines ${finding.codeLocation.lineStart || 'N/A'}-${finding.codeLocation.lineEnd || 'N/A'})\n`;
+        md += `* **Exposed Handler:** \`${finding.codeLocation.handler || 'inline'}()\`\n`;
+      }
+    }
+    md += `\n`;
     md += `**Description:**\n${finding.message}\n\n`;
     
     if (finding.codeSnippet) {
       md += `**Vulnerable Snippet:**\n\`\`\`\n${finding.codeSnippet}\n\`\`\`\n\n`;
+    }
+
+    if (finding.taintFlow) {
+      md += `**Data Flow Analysis:**\n`;
+      md += `* **Source:** \`${finding.taintFlow.source}\`\n`;
+      md += `* **Sink:** \`${finding.taintFlow.sink}()\`\n`;
+      md += `* **Flow Path:** ${finding.taintFlow.flow.map(f => `\`${f}\``).join(' ➔ ')}\n\n`;
     }
 
     md += `**Remediation Suggestion:**\n${finding.remediation}\n\n`;
@@ -153,12 +172,43 @@ function buildHtmlReport(report) {
             <span class="meta-pill">OWASP: <strong>${escapeHtml(finding.owasp)}</strong></span>
           </div>
           
+          ${finding.isCorrelated ? `
+            <div class="whitebox-correlation-block" style="background: rgba(6, 182, 212, 0.05); border: 1px solid rgba(6, 182, 212, 0.2); border-radius: 6px; padding: 10px; margin: 15px 0; font-size: 13px;">
+              <div style="font-weight: bold; color: var(--color-accent); margin-bottom: 4px; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;">White Box Correlation Details</div>
+              ${finding.endpoint ? `
+                <strong>Exposed Endpoint:</strong> <span style="background: rgba(6, 182, 212, 0.1); border: 1px solid rgba(6, 182, 212, 0.3); color: var(--color-accent); padding: 1px 5px; border-radius: 3px; font-weight: 600; font-size: 11.5px;">${escapeHtml(finding.endpointMethod)} ${escapeHtml(finding.endpointPath)}</span>
+                via handler <code>${escapeHtml(finding.handler)}()</code> (lines ${finding.codeLocation ? (finding.codeLocation.lineStart + '-' + finding.codeLocation.lineEnd) : 'N/A'})
+              ` : `
+                <strong>Controller File:</strong> <code>${escapeHtml(finding.codeLocation.file)}</code> (lines ${finding.codeLocation.lineStart || 'N/A'}-${finding.codeLocation.lineEnd || 'N/A'})
+                handling endpoint via <code>${escapeHtml(finding.codeLocation.handler || 'inline')}()</code>
+              `}
+            </div>
+          ` : ''}
+          
           <div class="section-title">Vulnerability Description</div>
           <div class="section-content">${escapeHtml(finding.message).replace(/\n/g, '<br>')}</div>
           
           ${finding.codeSnippet ? `
             <div class="section-title">Vulnerable Snippet</div>
             <pre class="codeblock-container"><code>${escapeHtml(finding.codeSnippet)}</code></pre>
+          ` : ''}
+
+          ${finding.taintFlow ? `
+            <div class="section-title">Data Flow Analysis</div>
+            <div class="taint-timeline" style="margin: 15px 0; border-left: 2px dashed rgba(6, 182, 212, 0.4); padding-left: 15px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="font-size: 12px; color: var(--text-muted);">
+                <strong style="color: var(--color-accent);">Source:</strong> <code>${escapeHtml(finding.taintFlow.source)}</code>
+              </div>
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11.5px;">
+                ${finding.taintFlow.flow.map((step, sIdx) => `
+                  <span><code>${escapeHtml(step)}</code></span>
+                  ${sIdx < finding.taintFlow.flow.length - 1 ? '<span style="color: var(--color-accent); font-weight: bold;">➔</span>' : ''}
+                `).join('')}
+              </div>
+              <div style="font-size: 12px; color: var(--text-muted);">
+                <strong style="color: var(--color-critical);">Sink:</strong> <code>${escapeHtml(finding.taintFlow.sink)}()</code> (Line ${finding.taintFlow.line})
+              </div>
+            </div>
           ` : ''}
           
           <div class="section-title">Remediation Steps</div>
@@ -576,10 +626,6 @@ function buildHtmlReport(report) {
                 <span class="sev-num">${sev.Medium}</span>
                 <span class="sev-lbl">Medium</span>
               </div>
-              <div class="sev-box low">
-                <span class="sev-num">${sev.Low}</span>
-                <span class="sev-lbl">Low</span>
-              </div>
             </div>
           </div>
 
@@ -670,8 +716,24 @@ async function buildReport(scanDirectory, projectName) {
   customFindings.forEach(addFinding);
   dependencyFindings.forEach(addFinding);
 
+  // Phase 7: Statically map routes and correlate findings (White Box)
+  const routeMapper = new RouteMapper();
+  const routes = routeMapper.mapRoutes(scanDirectory);
+
+  const correlationEngine = new CorrelationEngine();
+  const correlationResult = correlationEngine.correlate(combinedFindings, [], routes, scanDirectory);
+
+  // Save both correlated and unmatched findings in the final list, excluding Low and Info findings
+  const finalFindings = [
+    ...correlationResult.correlatedFindings,
+    ...correlationResult.unmatchedSast
+  ].filter(f => {
+    const sev = String(f.severity || '').toLowerCase();
+    return sev !== 'low' && sev !== 'info';
+  });
+
   // Run Risk Engine
-  const metrics = evaluateRisk(combinedFindings);
+  const metrics = evaluateRisk(finalFindings);
 
   const report = {
     id: reportId,
@@ -680,7 +742,8 @@ async function buildReport(scanDirectory, projectName) {
     filesScannedCount,
     semgrepStatus,
     metrics,
-    findings: combinedFindings
+    findings: finalFindings,
+    routes
   };
 
   // Save JSON report
@@ -689,7 +752,7 @@ async function buildReport(scanDirectory, projectName) {
     fs.mkdirSync(reportsDir, { recursive: true });
   }
   const reportPathJson = path.join(reportsDir, `${reportId}.json`);
-  fs.writeFileSync(reportPathJson, JSON.stringify(report, null, 2), 'utf8');
+  fs.writeFileSync(reportPathJson, encrypt(JSON.stringify(report)), 'utf8');
 
   // Save Markdown executive summary
   const reportPathMd = path.join(reportsDir, `${reportId}.md`);
@@ -973,10 +1036,6 @@ async function buildDocReport(report) {
     [
       { text: "Medium Risk (🟡)", bold: true, color: COLOR_MEDIUM },
       { text: String(sev.Medium), bold: true }
-    ],
-    [
-      { text: "Low Risk (🔵)", bold: true, color: COLOR_LOW },
-      { text: String(sev.Low), bold: true }
     ]
   ];
   children.push(new docx.Table({
@@ -1113,6 +1172,25 @@ async function buildDocReport(report) {
           { text: finding.owasp }
         ]
       ];
+
+      if (finding.isCorrelated) {
+        if (finding.endpoint) {
+          findingMetaRows.push([
+            { text: "Exposed URL:", bold: true, fill: "E6F7FF" },
+            { text: `${finding.endpointMethod || ''} ${finding.endpointPath || ''}`, bold: true, color: "0050B3" },
+            { text: "Controller Handler:", bold: true, fill: "E6F7FF" },
+            { text: `${finding.handler || 'inline'}() (lines ${finding.codeLocation ? (finding.codeLocation.lineStart + '-' + finding.codeLocation.lineEnd) : 'N/A'})` }
+          ]);
+        } else if (finding.codeLocation) {
+          findingMetaRows.push([
+            { text: "Controller File:", bold: true, fill: "E6F7FF" },
+            { text: `${finding.codeLocation.file}`, font: "Consolas" },
+            { text: "Controller Handler:", bold: true, fill: "E6F7FF" },
+            { text: `${finding.codeLocation.handler || 'inline'}() (lines ${finding.codeLocation.lineStart || 'N/A'}-${finding.codeLocation.lineEnd || 'N/A'})` }
+          ]);
+        }
+      }
+
       children.push(createMetaTable(findingMetaRows));
 
       children.push(new docx.Paragraph({
@@ -1131,6 +1209,16 @@ async function buildDocReport(report) {
         }));
         const codeBlock = createCodeBlock(finding.codeSnippet);
         if (codeBlock) children.push(codeBlock);
+      }
+
+      if (finding.taintFlow) {
+        children.push(new docx.Paragraph({
+          children: [new docx.TextRun({ text: "Data Flow Analysis (White Box Source-to-Sink Path)", bold: true, color: "0050B3" })],
+          spacing: { before: 100, after: 40 }
+        }));
+        const flowText = `Source: ${finding.taintFlow.source}\nSink: ${finding.taintFlow.sink}()\nFlow: ${finding.taintFlow.flow.join(' ➔ ')}`;
+        const flowBlock = createCodeBlock(flowText);
+        if (flowBlock) children.push(flowBlock);
       }
 
       children.push(new docx.Paragraph({

@@ -196,20 +196,18 @@ function buildCodePdfReport(reportData, res) {
   // Table Header
   doc.rect(50, tableTop, 490, 20).fill(colors.accentLight);
   doc.fillColor(colors.primary);
-  doc.text('CRITICAL', 60, tableTop + 6, { width: 95, align: 'center' });
-  doc.text('HIGH', 160, tableTop + 6, { width: 95, align: 'center' });
-  doc.text('MEDIUM', 260, tableTop + 6, { width: 95, align: 'center' });
-  doc.text('LOW', 360, tableTop + 6, { width: 95, align: 'center' });
-  doc.text('TOTAL', 460, tableTop + 6, { width: 70, align: 'center' });
+  doc.text('CRITICAL', 60, tableTop + 6, { width: 110, align: 'center' });
+  doc.text('HIGH', 180, tableTop + 6, { width: 110, align: 'center' });
+  doc.text('MEDIUM', 300, tableTop + 6, { width: 110, align: 'center' });
+  doc.text('TOTAL', 420, tableTop + 6, { width: 110, align: 'center' });
 
   // Table Data
   doc.rect(50, tableTop + 20, 490, 22).strokeColor(colors.border).stroke();
   doc.fontSize(10).font('Helvetica');
-  doc.text(String(c.Critical || 0), 60, tableTop + 27, { width: 95, align: 'center' });
-  doc.text(String(c.High || 0), 160, tableTop + 27, { width: 95, align: 'center' });
-  doc.text(String(c.Medium || 0), 260, tableTop + 27, { width: 95, align: 'center' });
-  doc.text(String(c.Low || 0), 360, tableTop + 27, { width: 95, align: 'center' });
-  doc.text(String(findings.length), 460, tableTop + 27, { width: 70, align: 'center' });
+  doc.text(String(c.Critical || 0), 60, tableTop + 27, { width: 110, align: 'center' });
+  doc.text(String(c.High || 0), 180, tableTop + 27, { width: 110, align: 'center' });
+  doc.text(String(c.Medium || 0), 300, tableTop + 27, { width: 110, align: 'center' });
+  doc.text(String(findings.length), 420, tableTop + 27, { width: 110, align: 'center' });
 
   doc.y = tableTop + 60;
 
@@ -314,7 +312,17 @@ function buildCodePdfReport(reportData, res) {
       
       const diffHeight = f.suggestedDiff ? 100 : 0;
 
-      const totalHeight = titleHeight + descHeight + gridHeight + codeHeight + remedHeight + diffHeight + 40;
+      let correlationHeight = 0;
+      if (f.isCorrelated && f.endpoint) {
+        correlationHeight = 35;
+      }
+
+      let taintHeight = 0;
+      if (f.taintFlow) {
+        taintHeight = 35;
+      }
+
+      const totalHeight = titleHeight + descHeight + gridHeight + correlationHeight + taintHeight + codeHeight + remedHeight + diffHeight + 40;
 
 
       // Start new page if the entire block does not fit on the current page
@@ -360,6 +368,33 @@ function buildCodePdfReport(reportData, res) {
       doc.text(`Remediation Type: Source Code Hardening`, 300, ry2 + 3, { width: 220 });
 
       doc.y = gridTop + gridHeight + 8;
+
+      if (f.isCorrelated && f.endpoint) {
+        const corrTop = doc.y;
+        doc.rect(50, corrTop, 490, 24).fill('#e6f7ff'); // light blue background
+        doc.lineWidth(1).strokeColor('#bae7ff').rect(50, corrTop, 490, 24).stroke();
+        
+        doc.fillColor('#0050b3').fontSize(7.5).font('Helvetica-Bold');
+        doc.text('WHITE BOX CORRELATION:', 60, corrTop + 8, { width: 120 });
+        
+        doc.fillColor(colors.text).font('Helvetica').fontSize(7);
+        doc.text(`Exposed Endpoint: ${f.endpointMethod || ''} ${f.endpointPath || ''} via controller handler ${f.handler || 'N/A'}()`, 175, corrTop + 8, { width: 350 });
+        doc.y = corrTop + 32;
+      }
+
+      if (f.taintFlow) {
+        const taintTop = doc.y;
+        doc.rect(50, taintTop, 490, 26).fill('#f0fdfa'); // light teal background
+        doc.lineWidth(1).strokeColor('#ccfbf1').rect(50, taintTop, 490, 26).stroke();
+        
+        doc.fillColor('#0d9488').fontSize(7.5).font('Helvetica-Bold');
+        doc.text('DATA FLOW ANALYSIS:', 60, taintTop + 8, { width: 120 });
+        
+        doc.fillColor(colors.text).font('Helvetica').fontSize(6.5);
+        const flowStr = f.taintFlow.flow.join(' ➔ ');
+        doc.text(`Flow Path: ${flowStr}`, 175, taintTop + 8, { width: 350 });
+        doc.y = taintTop + 34;
+      }
 
       // Evidence Codebox (Monospace codeSnippet)
       if (f.codeSnippet && f.codeSnippet !== 'requires login') {

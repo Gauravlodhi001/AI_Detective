@@ -2,8 +2,11 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs');
+const { z } = require('zod');
 const { runWaptScan } = require('../scanners/wapt_scanner');
 const { buildPdfReport } = require('../parsers/pdf_builder');
+const { validateUrlForSsrf } = require('../utils/ssrfFilter');
+const { encrypt, decrypt } = require('../utils/crypto');
 
 const REPORTS_DIR = path.join(__dirname, '../../reports');
 
@@ -12,20 +15,34 @@ if (!fs.existsSync(REPORTS_DIR)) {
   fs.mkdirSync(REPORTS_DIR, { recursive: true });
 }
 
+const waptScanSchema = z.object({
+  targetUrl: z.string().url('Invalid target URL format').refine(val => val.startsWith('http://') || val.startsWith('https://'), {
+    message: 'Only HTTP and HTTPS protocols are allowed'
+  }),
+  authConfig: z.any().optional(),
+  scanId: z.string().optional()
+});
+
 /**
  * @route POST /api/wapt/scan
  * @desc Run WAPT scan on targetUrl
  */
 router.post('/scan', async (req, res, next) => {
   try {
-    const { targetUrl, authConfig, scanId } = req.body;
-
-    if (!targetUrl) {
-      return res.status(400).json({ success: false, message: 'Target URL is required' });
+    const parseResult = waptScanSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: (parseResult.error?.issues || parseResult.error?.errors || []).map(e => e.message).join(', ') || 'Validation failed'
+      });
     }
 
-    if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
-      return res.status(400).json({ success: false, message: 'Invalid URL scheme. Must begin with http:// or https://' });
+    const { targetUrl, authConfig, scanId } = parseResult.data;
+
+    // SSRF validation
+    const ssrfResult = await validateUrlForSsrf(targetUrl);
+    if (!ssrfResult.isValid) {
+      return res.status(400).json({ success: false, message: ssrfResult.error || 'Access to this URL is blocked.' });
     }
 
     const activeScanId = scanId || `wapt-scan-${Date.now()}`;
@@ -45,7 +62,7 @@ router.post('/scan', async (req, res, next) => {
       ...result
     };
 
-    fs.writeFileSync(reportPath, JSON.stringify(reportData, null, 2), 'utf-8');
+    fs.writeFileSync(reportPath, encrypt(JSON.stringify(reportData)), 'utf-8');
 
     // Clean up logs map after a delay to allow final polling cycles to finish
     setTimeout(() => {
@@ -98,7 +115,7 @@ router.get('/reports', (req, res, next) => {
         try {
           const filePath = path.join(REPORTS_DIR, file);
           const raw = fs.readFileSync(filePath, 'utf-8');
-          const data = JSON.parse(raw);
+          const data = JSON.parse(decrypt(raw));
 
           reports.push({
             reportId: data.reportId,
@@ -141,7 +158,7 @@ router.get('/reports/:id', (req, res, next) => {
     }
 
     const raw = fs.readFileSync(reportPath, 'utf-8');
-    const data = JSON.parse(raw);
+    const data = JSON.parse(decrypt(raw));
 
     res.json(data);
 
@@ -164,7 +181,7 @@ router.get('/reports/:id/pdf', (req, res, next) => {
     }
 
     const raw = fs.readFileSync(reportPath, 'utf-8');
-    const data = JSON.parse(raw);
+    const data = JSON.parse(decrypt(raw));
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${data.projectName || 'wapt'}-security-report-${id}.pdf"`);

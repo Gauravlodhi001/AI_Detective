@@ -3,6 +3,8 @@ const https = require('https');
 const { URL } = require('url');
 const fs = require('fs');
 const path = require('path');
+const dns = require('dns');
+const { validateUrlForSsrf } = require('../utils/ssrfFilter');
 
 const { StatefulSessionManager } = require('../utils/statefulSession');
 const { SessionBridge } = require('../utils/sessionBridge');
@@ -61,7 +63,7 @@ function request(urlStr, options = {}) {
 
 function rawRequest(urlStr, options = {}) {
 
-  return new Promise((resolve) => {
+  return new Promise(async (resolve) => {
     let resolved = false;
     let req = null;
 
@@ -94,6 +96,18 @@ function rawRequest(urlStr, options = {}) {
     let rawRequestStr = '';
 
     try {
+      // Validate target URL against SSRF
+      const ssrfCheck = await validateUrlForSsrf(urlStr);
+      if (!ssrfCheck.isValid) {
+        return safeResolve({
+          status: 403,
+          headers: {},
+          body: '',
+          error: 'SSRF_BLOCKED',
+          rawRequest: `GET ${urlStr} HTTP/1.1\r\n\r\n`,
+          rawResponse: `HTTP/1.1 403 Forbidden\r\n\r\nError: SSRF block: ${ssrfCheck.error}`
+        });
+      }
       const parsedUrl = new URL(urlStr);
       const protocol = parsedUrl.protocol === 'https:' ? https : http;
 
@@ -101,7 +115,19 @@ function rawRequest(urlStr, options = {}) {
         method: options.method || 'GET',
         headers: options.headers || {},
         timeout: timeoutMs,
-        rejectUnauthorized: false
+        rejectUnauthorized: false,
+        lookup: (hostname, dnsOptions, callback) => {
+          if (hostname === parsedUrl.hostname && ssrfCheck.ip) {
+            const family = ssrfCheck.ip.includes(':') ? 6 : 4;
+            if (dnsOptions && dnsOptions.all) {
+              callback(null, [{ address: ssrfCheck.ip, family }]);
+            } else {
+              callback(null, ssrfCheck.ip, family);
+            }
+          } else {
+            dns.lookup(hostname, dnsOptions, callback);
+          }
+        }
       };
 
       // Set standard headers to look like a browser scan
@@ -168,6 +194,35 @@ function rawRequest(urlStr, options = {}) {
           });
         });
       });
+
+      // Provide code evidence showing the connected socket IP equals the validated IP
+      const trackSocket = (socket) => {
+        const checkIp = () => {
+          const remoteIp = socket.remoteAddress;
+          if (remoteIp) {
+            console.log(`[WAPT SOCKET EVIDENCE] targetUrl: ${urlStr} | socket.remoteAddress: ${remoteIp} | validatedIp: ${ssrfCheck.ip}`);
+            if (remoteIp !== ssrfCheck.ip) {
+              console.error(`[WAPT SOCKET MISMATCH WARNING] Connected IP ${remoteIp} does not match validated IP ${ssrfCheck.ip}!`);
+            }
+          }
+        };
+
+        if (socket.connecting) {
+          socket.once('connect', checkIp);
+          socket.once('secureConnect', checkIp);
+        } else {
+          // If socket is already connected (e.g. keep-alive socket or synchronous lookup connect)
+          // wait a tiny bit to ensure socket properties are initialized, or check immediately
+          checkIp();
+          setTimeout(checkIp, 50);
+        }
+      };
+
+      if (req.socket) {
+        trackSocket(req.socket);
+      } else {
+        req.on('socket', trackSocket);
+      }
 
       req.on('error', (err) => {
         safeResolve({
@@ -2265,6 +2320,7 @@ async function loginAndGetHeaders(baseUrl, authConfig, log) {
 
 function findLastWaptReport(targetUrl, log) {
   try {
+    const { decrypt } = require('../utils/crypto');
     const REPORTS_DIR = path.join(__dirname, '../../reports');
     if (!fs.existsSync(REPORTS_DIR)) return null;
 
@@ -2277,7 +2333,7 @@ function findLastWaptReport(targetUrl, log) {
         try {
           const filePath = path.join(REPORTS_DIR, file);
           const raw = fs.readFileSync(filePath, 'utf-8');
-          const data = JSON.parse(raw);
+          const data = JSON.parse(decrypt(raw));
           if (data.targetUrl === targetUrl && data.scanTime > newestTime) {
             newestTime = data.scanTime;
             newestReport = data;
@@ -2606,7 +2662,7 @@ async function runWaptScan(targetUrl, authConfig = null, scanId = null) {
     __sessionManager: sessions.userA
   };
 
-  const allFindings = [...idorFindings];
+  let allFindings = [...idorFindings];
 
   const checkLogPairs = [
     { fn: checkSecurityHeaders },
@@ -2741,6 +2797,12 @@ async function runWaptScan(targetUrl, authConfig = null, scanId = null) {
     // Sync backward compatibility fields
     f.confidenceScore = Math.round((f.detectionConfidence + f.riskConfidence) / 2);
     f.confidence = f.riskConfidence >= 70 ? 'High' : f.riskConfidence >= 40 ? 'Medium' : 'Low';
+  });
+
+  // Filter out Low and Info findings as requested
+  allFindings = allFindings.filter(f => {
+    const sev = String(f.finalSeverity || '').toLowerCase();
+    return sev !== 'low' && sev !== 'info';
   });
 
   // Intelligent Severity and Scoring Engine
@@ -2913,6 +2975,7 @@ async function runWaptScan(targetUrl, authConfig = null, scanId = null) {
 }
 
 module.exports = {
-  runWaptScan
+  runWaptScan,
+  rawRequest
 };
 

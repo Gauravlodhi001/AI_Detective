@@ -232,6 +232,21 @@ export async function handleWaptScan() {
 }
 
 export function renderWaptResults(result) {
+  if (result && result.findings) {
+    result.findings = result.findings.filter(f => {
+      const sev = String(f.severity || f.finalSeverity || '').toLowerCase();
+      return sev !== 'low' && sev !== 'info';
+    });
+  }
+  if (result && result.metrics) {
+    result.metrics.severityCounts = {
+      Critical: (result.findings || []).filter(f => (f.severity || f.finalSeverity) === 'Critical').length,
+      High: (result.findings || []).filter(f => (f.severity || f.finalSeverity) === 'High').length,
+      Medium: (result.findings || []).filter(f => (f.severity || f.finalSeverity) === 'Medium').length,
+      Low: 0,
+      Info: 0
+    };
+  }
   window.activeWaptReportId = result.reportId;
   document.getElementById('wapt-results-placeholder').style.display = 'none';
   document.getElementById('wapt-results-panel').style.display = 'block';

@@ -12,153 +12,338 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
   
   <!-- FontAwesome Icons -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer">
   
   <!-- Chart.js for beautiful graphs -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js" integrity="sha512-sZLif02pOYdWSGSO18HakvSGGR7qB+dwhVOElFJrXQK4BYUi31NcTyD6ah7iWUHzn8e5PRqLMjfFFrtt8QqGDw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   
-  <!-- Premium Stylesheet -->
-  <link rel="stylesheet" href="styles.css">
+  <!-- Corporate Redesign Stylesheets -->
+  <link rel="stylesheet" href="css/theme.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  
+  <!-- Three.js for 3D Correlation Universe -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
   <!-- App Wrapper -->
   <div class="app-container">
     
-    <!-- Sidebar Navigation -->
-    <aside class="sidebar">
-      <div class="sidebar-brand">
-        <div class="brand-logo">
-          <i class="fa-solid fa-user-secret"></i>
-        </div>
-        <span class="brand-name">AI-DETECTIVE</span>
+    <!-- Top App Header / Console Navigation -->
+    <header class="app-header">
+      <div class="header-brand">
+        <span class="brand-name">AI_DETECTIVE // CONSOLE</span>
       </div>
       
-      <nav class="sidebar-nav">
-        <button id="nav-btn-dashboard" class="nav-item active" onclick="switchTab('dashboard')">
-          <i class="fa-solid fa-chart-line"></i>
-          <span>Dashboard</span>
-        </button>
-        <button id="nav-btn-scan" class="nav-item" onclick="switchTab('scan')">
-          <i class="fa-solid fa-shield-halved"></i>
-          <span>Scan Code</span>
-        </button>
-        <button id="nav-btn-reports" class="nav-item" onclick="switchTab('reports')">
-          <i class="fa-solid fa-file-invoice-solid"></i>
-          <span>Saved Reports</span>
-        </button>
-        <button id="nav-btn-settings" class="nav-item" onclick="switchTab('settings')">
-          <i class="fa-solid fa-sliders"></i>
-          <span>Settings</span>
-        </button>
-        <button id="nav-btn-wapt" class="nav-item" onclick="switchTab('wapt')">
-          <i class="fa-solid fa-crosshairs"></i>
-          <span>WAPT</span>
-        </button>
+      <nav class="header-nav">
+        <button id="nav-btn-scan" class="nav-item active" onclick="switchTab('scan')">[SCAN]</button>
+        <button id="nav-btn-report-viewer" class="nav-item" onclick="switchTab('report-viewer')" style="display: none;">[REPORT]</button>
+        <button id="nav-btn-reports" class="nav-item" onclick="switchTab('reports')">[REPORTS]</button>
+        <button id="nav-btn-wapt" class="nav-item" onclick="switchTab('wapt')">[WAPT]</button>
+        <button id="nav-btn-settings" class="nav-item" onclick="switchTab('settings')">[SETTINGS]</button>
       </nav>
       
-      <div class="sidebar-footer">
+      <div class="header-status" style="display: flex; align-items: center; gap: 15px;">
+        <span id="user-profile-info" style="font-family: monospace; font-size: 11px; color: var(--color-accent); font-weight: bold; display: none;"></span>
+        <button id="logout-btn" onclick="handleLogoutSubmit()" class="btn btn-red" style="font-family: monospace; font-size: 10px; padding: 4px 8px; cursor: pointer; display: none;">LOGOUT</button>
         <div class="status-badge" id="semgrep-status-badge">
           <span class="status-dot pulsing"></span>
-          <span id="semgrep-status-text">Detecting Semgrep...</span>
+          <span id="semgrep-status-text">Semgrep Active</span>
         </div>
+        <!-- Hidden page title to support legacy DOM references -->
+        <span id="page-title" style="display: none;">Security Dashboard</span>
       </div>
-    </aside>
+    </header>
 
     <!-- Main Content Area -->
     <main class="main-content">
-      
-      <!-- Top App Bar -->
-      <header class="app-header">
-        <h1 id="page-title">Security Dashboard</h1>
-        <div class="header-actions">
-          <div class="user-profile">
-            <span class="profile-name">Developer Session</span>
-            <div class="profile-avatar">
-              <i class="fa-solid fa-code"></i>
-            </div>
-          </div>
-        </div>
-      </header>
 
-      <!-- TAB: DASHBOARD -->
-      <section id="tab-dashboard" class="tab-pane active">
-        <!-- Top Metrics Cards -->
-        <div class="metrics-grid">
-          <div class="metric-card">
-            <div class="metric-icon blue"><i class="fa-solid fa-list-check"></i></div>
-            <div class="metric-details">
-              <span class="metric-label">Total Audits</span>
-              <h2 id="stat-total-scans" class="metric-value">0</h2>
+      <!-- TAB: REPORT VIEWER (3D Correlation Cockpit) -->
+      <section id="tab-report-viewer" class="tab-pane">
+        
+        <!-- Persistent Report Header Toolbar (sticky) -->
+        <div class="report-toolbar glass-hud" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; border-radius: 6px; margin-bottom: 12px; border: 1px solid var(--border-color); background: rgba(18, 18, 18, 0.7); flex-shrink: 0; gap: 15px;">
+          <!-- Left side: Project Details -->
+          <div style="display: flex; align-items: center; gap: 24px; flex-wrap: wrap;">
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <span style="font-size: 9px; text-transform: uppercase; color: var(--text-muted); font-family: monospace; letter-spacing: 0.5px;">Project Name</span>
+              <strong id="report-toolbar-project-name" style="font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 700; color: var(--text-main); line-height: 1.2;">Loading...</strong>
             </div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-icon green"><i class="fa-solid fa-shield-cat"></i></div>
-            <div class="metric-details">
-              <span class="metric-label">Secure Projects</span>
-              <h2 id="stat-secure-projects" class="metric-value">0</h2>
-            </div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-icon red"><i class="fa-solid fa-triangle-exclamation"></i></div>
-            <div class="metric-details">
-              <span class="metric-label">Vulnerability Hotspots</span>
-              <h2 id="stat-hotspot-projects" class="metric-value">0</h2>
-            </div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-icon yellow"><i class="fa-solid fa-fire-flame-curved"></i></div>
-            <div class="metric-details">
-              <span class="metric-label">Top Threat Category</span>
-              <h2 id="stat-top-threat" class="metric-value">None</h2>
-            </div>
-          </div>
-        </div>
 
-        <!-- Recent Activity Section -->
-        <div class="content-card">
-          <div class="card-header">
-            <h2>Recent Security Audits</h2>
-            <button class="btn btn-primary btn-sm" onclick="switchTab('scan')">
-              <i class="fa-solid fa-plus"></i> New Scan
+            <div style="display: flex; align-items: center;">
+              <span class="grade-badge" id="report-toolbar-grade" style="font-size: 13.5px; font-weight: 800; padding: 4px 8px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 32px;">-</span>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <span style="font-size: 9px; text-transform: uppercase; color: var(--text-muted); font-family: monospace; letter-spacing: 0.5px;">Vulnerability Score</span>
+              <strong id="report-toolbar-score" style="font-family: monospace; font-size: 15px; font-weight: bold; color: var(--color-accent); line-height: 1.2;">0</strong>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <span style="font-size: 9px; text-transform: uppercase; color: var(--text-muted); font-family: monospace; letter-spacing: 0.5px;">Scan Date</span>
+              <strong id="report-toolbar-date" style="font-family: monospace; font-size: 13px; font-weight: 500; color: var(--text-main); line-height: 1.2;">-</strong>
+            </div>
+          </div>
+
+          <!-- Right side: Action Buttons -->
+          <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+            <!-- AI Audit Button -->
+            <button class="btn btn-purple font-mono text-uppercase" id="toolbar-ai-btn" onclick="triggerCockpitAiAudit()" style="font-family: monospace; font-size: 10.5px; padding: 6px 12px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+              <i class="fa-solid fa-wand-magic-sparkles"></i> Launch AI Audit
             </button>
+
+            <!-- Run New Scan Button -->
+            <button class="btn btn-blue font-mono text-uppercase" onclick="switchTab('scan')" style="font-family: monospace; font-size: 10.5px; padding: 6px 12px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+              <i class="fa-solid fa-rotate"></i> Run New Scan
+            </button>
+
+            <!-- Download Dropdown -->
+            <div class="download-dropdown-container" style="position: relative; display: inline-block;">
+              <button class="btn btn-grey font-mono text-uppercase" id="download-dropdown-toggle-btn" onclick="toggleDownloadDropdown(event)" style="font-family: monospace; font-size: 10.5px; padding: 6px 12px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                <i class="fa-solid fa-download"></i> Download Report <i class="fa-solid fa-chevron-down" style="font-size: 8px; margin-left: 2px;"></i>
+              </button>
+              <div id="download-dropdown-menu" class="glass-hud dropdown-menu" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 5px; z-index: 150; min-width: 150px; box-shadow: var(--shadow-lg); border: 1px solid var(--border-color); border-radius: 4px; background: rgba(18, 18, 18, 0.95); padding: 4px 0;">
+                <a href="#" class="dropdown-item" onclick="exportReport('pdf'); event.preventDefault();" style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 11px; text-decoration: none; color: var(--text-main); font-family: monospace;">
+                  <i class="fa-solid fa-file-pdf" style="color: #f43f5e; width: 14px;"></i> PDF (.pdf)
+                </a>
+                <a href="#" class="dropdown-item" onclick="exportReport('doc'); event.preventDefault();" style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 11px; text-decoration: none; color: var(--text-main); font-family: monospace;">
+                  <i class="fa-solid fa-file-word" style="color: #3b82f6; width: 14px;"></i> Word (.docx)
+                </a>
+                <a href="#" class="dropdown-item" onclick="exportReport('markdown'); event.preventDefault();" style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 11px; text-decoration: none; color: var(--text-main); font-family: monospace;">
+                  <i class="fa-brands fa-markdown" style="color: #10b981; width: 14px;"></i> Markdown (.md)
+                </a>
+                <a href="#" class="dropdown-item" onclick="exportReport('html'); event.preventDefault();" style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 11px; text-decoration: none; color: var(--text-main); font-family: monospace;">
+                  <i class="fa-solid fa-code" style="color: #eab308; width: 14px;"></i> HTML (.html)
+                </a>
+                <a href="#" class="dropdown-item" onclick="exportReport('json'); event.preventDefault();" style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 11px; text-decoration: none; color: var(--text-main); font-family: monospace;">
+                  <i class="fa-solid fa-code-compare" style="color: #a855f7; width: 14px;"></i> JSON (.json)
+                </a>
+              </div>
+            </div>
           </div>
-          
-          <div class="table-responsive">
-            <table class="data-table" id="recent-scans-table">
-              <thead>
-                <tr>
-                  <th>Project Name</th>
-                  <th>Grade</th>
-                  <th>Score</th>
-                  <th>Issues (C/H/M/L)</th>
-                  <th>Files Scanned</th>
-                  <th>Date & Time</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="scan-list-tbody">
-                <!-- JavaScript populates this -->
-                <tr class="empty-state-row">
-                  <td colspan="7">
-                    <div class="empty-state">
-                      <i class="fa-solid fa-folder-open"></i>
-                      <p>No scans performed yet. Head over to the scan tab to audit your code.</p>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+        </div>
+
+        <!-- Dual-View Sub-Tabs Row -->
+        <div class="report-subtabs-row" style="display: flex; gap: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; margin-bottom: 12px; flex-shrink: 0;">
+          <button class="subtab-btn active" id="subtab-btn-cockpit" onclick="switchReportSubTab('cockpit')" style="background: none; border: 1px solid transparent; color: var(--text-muted); font-family: monospace; font-size: 11.5px; padding: 6px 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; border-radius: 4px; transition: var(--transition-fast);">
+            <i class="fa-solid fa-globe"></i> 3D Cockpit
+          </button>
+          <button class="subtab-btn" id="subtab-btn-catalog" onclick="switchReportSubTab('catalog')" style="background: none; border: 1px solid transparent; color: var(--text-muted); font-family: monospace; font-size: 11.5px; padding: 6px 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; border-radius: 4px; transition: var(--transition-fast);">
+            <i class="fa-solid fa-table-list"></i> Detailed Catalog
+          </button>
+        </div>
+
+        <!-- SUBTAB 1: 3D COCKPIT PANE -->
+        <div id="report-subtab-cockpit" class="report-subtab-pane active" style="width: 100%; display: flex; flex-direction: column; gap: 12px;">
+          <div class="cockpit-grid">
+            
+            <!-- Column 1: Vulnerability & Remediation Details (Left Column) -->
+            <div class="cockpit-left-column">
+              <!-- Active Vulnerability Card -->
+              <div class="console-card" id="cockpit-risk-card">
+                <div class="console-header">
+                  <span class="console-title text-vulnerability-red" id="cockpit-risk-title" style="color: var(--color-critical);">NO ACTIVE SELECTION</span>
+                </div>
+                <div class="console-body" id="cockpit-risk-body" style="padding: 12px; font-family: monospace; font-size: 11.5px; line-height: 1.45;">
+                  <div class="empty-state-text">SELECT A NODE IN THE UNIVERSE TO INSPECT FINDINGS.</div>
+                </div>
+              </div>
+
+              <!-- Attack Path Trace Card -->
+              <div class="console-card" id="cockpit-attack-path-card">
+                <div class="console-header">
+                  <span class="console-title">WHITE_BOX_ATTACK_PATH</span>
+                </div>
+                <div class="console-body" id="cockpit-attack-path-body" style="padding: 12px; font-family: monospace; font-size: 11px; line-height: 1.45; overflow-y: auto;">
+                  <div class="empty-state-text">NO ACTIVE PATH TRACE.</div>
+                </div>
+              </div>
+
+              <!-- Mitigation Diff Card -->
+              <div class="console-card flex-grow-1" id="cockpit-diff-card">
+                <div class="console-header">
+                  <span class="console-title">MITIGATION_DIFF</span>
+                </div>
+                <div class="console-body" id="cockpit-diff-body" style="padding: 10px; font-family: monospace; font-size: 11px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+                  <div class="empty-state-text">NO MITIGATION DIFF LOADED.</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Column 2: 3D Correlation Universe (Center Canvas) -->
+            <div class="cockpit-center-canvas" style="position: relative; flex-grow: 1; min-height: 400px; display: flex; flex-direction: column;">
+              <!-- ThreeJS WebGL Target Container -->
+              <div id="threejs-universe-container" style="position: absolute; inset: 0; width: 100%; height: 100%; z-index: 10;"></div>
+
+              <!-- Floating Posture Node Overlay -->
+              <div class="posture-node-overlay" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 20; pointer-events: none;">
+                <div class="signal-radar-container">
+                  <svg class="radar-svg" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="45" stroke="#222" stroke-width="1.5" fill="none"/>
+                    <circle cx="50" cy="50" r="35" stroke="#161616" stroke-width="1" fill="none"/>
+                    <circle cx="50" cy="50" r="20" stroke="#161616" stroke-width="1" fill="none"/>
+                    <line x1="50" y1="5" x2="50" y2="95" stroke="#161616" stroke-width="1"/>
+                    <line x1="5" y1="50" x2="95" y2="50" stroke="#161616" stroke-width="1"/>
+                    <circle cx="50" cy="50" r="40" stroke="var(--color-accent)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-dasharray="251.2" stroke-dashoffset="251.2" class="radar-score-arc" id="dashboard-score-arc"/>
+                    <line x1="50" y1="50" x2="50" y2="10" stroke="var(--color-accent)" stroke-width="1.5" class="radar-needle" id="dashboard-score-needle"/>
+                  </svg>
+                  <div class="radar-value-container">
+                    <span class="radar-value" id="dashboard-score-value">0</span>
+                    <span class="radar-label">SIGNAL</span>
+                  </div>
+                </div>
+                <div class="radar-posture-status" id="dashboard-posture-text">POSTURE: STABLE</div>
+              </div>
+
+              <!-- Floating Node Hover Tooltip -->
+              <div id="floating-node-meta" class="glass-hud" style="display: none; position: absolute; bottom: 12px; left: 12px; z-index: 30; padding: 10px; border-radius: 4px; border: 1px solid var(--border-color); background: rgba(10,10,10,0.85); font-family: monospace; font-size: 11px; max-width: 280px; pointer-events: none;">
+                <div class="node-meta-title" style="font-weight: bold; color: var(--color-accent); margin-bottom: 4px; text-transform: uppercase;">NODE DETAILS</div>
+                <div class="node-meta-desc" style="color: var(--text-main); word-break: break-all;">Hover over a node...</div>
+              </div>
+
+              <!-- Glassmorphic AI Detective Insights Modal -->
+              <div id="ai-insights-modal" class="glass-hud" style="display: none; position: absolute; inset: 15px; z-index: 40; padding: 20px; border-radius: 8px; background: rgba(10,10,10,0.96); overflow-y: auto; display: flex; flex-direction: column; gap: 15px; font-family: monospace;">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+                  <h3 style="margin: 0; color: var(--color-accent); font-family: 'Outfit', sans-serif; font-size: 14px; display: flex; align-items: center; gap: 8px; font-weight: 700;">
+                    <i class="fa-solid fa-user-secret"></i> AI_DETECTIVE_THREAT_INSIGHTS
+                  </h3>
+                  <button onclick="closeAiInsightsModal()" style="background: none; border: 1px solid var(--border-color); color: var(--text-muted); cursor: pointer; padding: 4px 10px; font-size: 11px; border-radius: 4px; background: rgba(255,255,255,0.02);">[CLOSE]</button>
+                </div>
+                <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; flex-grow: 1; min-height: 0;">
+                  <div style="display: flex; flex-direction: column; gap: 15px; overflow-y: auto; padding-right: 5px;">
+                    <div style="font-weight: bold; color: var(--text-main); border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; font-size: 11px; letter-spacing: 0.5px;">EXECUTIVE SUMMARY</div>
+                    <div id="modal-ai-summary" style="font-size: 11.5px; line-height: 1.5; color: var(--text-muted);"></div>
+                    
+                    <div style="font-weight: bold; color: var(--text-main); border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; font-size: 11px; letter-spacing: 0.5px; margin-top: 10px;">THREAT PROPAGATION Narratives</div>
+                    <div id="modal-ai-timeline" style="font-size: 11px; line-height: 1.55; display: flex; flex-direction: column; gap: 12px;"></div>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 15px; overflow-y: auto;">
+                    <div style="font-weight: bold; color: var(--text-main); border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; font-size: 11px; letter-spacing: 0.5px;">REMEDIATION PRIORITY rankings</div>
+                    <div id="modal-ai-priority" style="display: flex; flex-direction: column; gap: 10px;"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Column 3: Analytical Metrics Panels (Right Column) -->
+            <div class="cockpit-right-column">
+              <!-- Telemetry Badges -->
+              <div class="grid grid-cols-2 gap-2" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 2px; flex-shrink: 0;">
+                <div class="glass-hud cockpit-metric-card" style="padding: 10px; border-top: 2px solid var(--color-accent); background: rgba(0,0,0,0.25); border-radius: 4px; border: 1px solid var(--border-color); border-top: 2px solid var(--color-accent);">
+                  <div class="metric-label" style="font-size: 9px; font-family: monospace;">FINDINGS</div>
+                  <div class="metric-value" id="stat-total-findings" style="font-size: 24px; font-family: monospace; font-weight: bold; margin-top: 4px;">00</div>
+                </div>
+                <div class="glass-hud cockpit-metric-card" style="padding: 10px; border-top: 2px solid var(--color-critical); background: rgba(0,0,0,0.25); border-radius: 4px; border: 1px solid var(--border-color); border-top: 2px solid var(--color-critical);">
+                  <div class="metric-label" style="font-size: 9px; font-family: monospace; color: var(--color-critical);">CRITICAL</div>
+                  <div class="metric-value" id="stat-critical-findings" style="font-size: 24px; font-family: monospace; font-weight: bold; color: var(--color-critical); margin-top: 4px;">00</div>
+                </div>
+              </div>
+
+              <!-- Privilege Audit Matrix -->
+              <div class="console-card" id="cockpit-privilege-card">
+                <div class="console-header">
+                  <span class="console-title">PRIVILEGE_AUDIT_MATRIX</span>
+                </div>
+                <div class="console-body" id="cockpit-privilege-body" style="height: 120px; padding: 8px;">
+                  <canvas id="cockpit-privilege-canvas"></canvas>
+                </div>
+              </div>
+
+              <!-- Speedometer Risk Metric -->
+              <div class="console-card" id="cockpit-multi-axis-risk">
+                <div class="console-header">
+                  <span class="console-title">MULTI_AXIS_RISK</span>
+                </div>
+                <div class="console-body flex-center-column" style="height: 140px; padding: 10px; position: relative;">
+                  <div class="speedometer-wrapper" style="width: 80px; height: 80px; position: relative; margin: 0 auto;">
+                    <svg viewBox="0 0 100 100" style="transform: rotate(-90deg); width: 100%; height: 100%;">
+                      <circle cx="50" cy="50" r="40" stroke="#1c1b1b" stroke-width="8" fill="none"/>
+                      <circle cx="50" cy="50" r="40" stroke="var(--color-accent)" stroke-width="8" fill="none" stroke-linecap="round" stroke-dasharray="251.2" stroke-dashoffset="200" id="cockpit-speedometer-arc"/>
+                    </svg>
+                    <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: monospace; font-size: 14px; font-weight: bold; color: var(--text-main);" id="cockpit-speedometer-value">0%</div>
+                  </div>
+                  <div class="grid grid-cols-2" style="display: grid; grid-template-columns: 1fr 1fr; width: 100%; text-align: center; font-family: monospace; font-size: 9px; margin-top: 8px; color: var(--text-muted);">
+                    <div>SAST: <span class="text-secondary" id="cockpit-sast-count" style="color: var(--color-low); font-weight: bold;">0</span></div>
+                    <div>SCA: <span class="text-secondary" id="cockpit-sca-count" style="color: var(--color-accent); font-weight: bold;">0</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Findings History Trend -->
+              <div class="console-card flex-grow-1" id="cockpit-findings-trend-card">
+                <div class="console-header">
+                  <span class="console-title">CRITICAL_FINDINGS_30D</span>
+                </div>
+                <div class="console-body" id="cockpit-findings-trend-body" style="padding: 8px; display: flex; align-items: center; justify-content: center; min-height: 100px;">
+                  <canvas id="cockpit-trend-canvas" style="width: 100%; height: 100%; max-height: 100px;"></canvas>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- SUBTAB 2: DETAILED FINDINGS CATALOG PANE -->
+        <div id="report-subtab-catalog" class="report-subtab-pane" style="width: 100%; display: none;">
+          <div class="console-card" style="width: 100%;">
+            <div class="console-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+              <span class="console-title">Vulnerability findings catalog</span>
+              <div class="filters-row" style="display: flex; gap: 8px; align-items: center;">
+                <input type="text" id="finding-search-input" placeholder="Search by name, file or rule ID..." oninput="filterFindings()" style="padding: 6px 12px; background: rgba(0, 0, 0, 0.45); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-main); font-size: 11px; font-family: monospace; width: 220px; outline: none;">
+                <select id="finding-severity-filter" onchange="filterFindings()" style="padding: 6px 12px; background: rgba(0, 0, 0, 0.45); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-main); font-size: 11px; font-family: monospace; outline: none; cursor: pointer;">
+                  <option value="ALL">All Severities</option>
+                  <option value="CRITICAL">🔴 Critical Only</option>
+                  <option value="HIGH">🟠 High Only</option>
+                  <option value="MEDIUM">🟡 Medium Only</option>
+                  <option value="LOW">🔵 Low Only</option>
+                </select>
+              </div>
+            </div>
+            <div class="console-body" style="padding: 15px; overflow-y: auto; height: calc(100vh - 350px); min-height: 520px;">
+              <!-- Findings Accordion -->
+              <div class="findings-accordion" id="findings-list-accordion">
+                <!-- Populated via JavaScript -->
+              </div>
+            </div>
+          </div>
+        </div>
+<!-- Full-Width Scan Log Console -->
+        <div class="console-card scan-log-card" style="margin-top: 15px;">
+          <div class="console-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <span class="console-title">SCAN_LOG_V2.0.4</span>
+            <div class="flex gap-2 font-code-sm" style="display: flex; gap: 10px; font-family: monospace; font-size: 11px;">
+              <button class="text-on-surface-variant hover:text-primary transition-colors cursor-pointer" onclick="clearConsoleLogs()" style="background: none; border: none; color: var(--text-muted); cursor: pointer;">[CLEAR]</button>
+            </div>
+          </div>
+          <div class="console-body" id="dashboard-console-logs" style="height: 100px; max-height: 100px;">
+            <div class="console-line success">> system initialized. standing by for security audit scans.</div>
           </div>
         </div>
       </section>
 
       <!-- TAB: SCAN CODE (Scan Hub) -->
-      <section id="tab-scan" class="tab-pane">
+      <section id="tab-scan" class="tab-pane active">
         <div class="scan-hub-grid">
           
           <!-- Scan Control Cards -->
           <div class="scan-controls-container">
+            <!-- White Box Info Banner -->
+            <div class="white-box-info-banner" style="background: linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(16, 185, 129, 0.04) 100%); border: 1px solid rgba(6, 182, 212, 0.18); border-radius: 12px; padding: 16px; margin-bottom: 20px; display: flex; gap: 14px; align-items: flex-start; box-shadow: 0 8px 32px rgba(6, 182, 212, 0.05);">
+              <div style="background: rgba(6, 182, 212, 0.12); border: 1px solid rgba(6, 182, 212, 0.25); border-radius: 8px; padding: 10px; color: var(--color-accent); font-size: 20px; display: flex; align-items: center; justify-content: center;">
+                <i class="fa-solid fa-microchip"></i>
+              </div>
+              <div style="flex: 1;">
+                <h3 style="margin: 0 0 4px 0; font-size: 13.5px; font-weight: 700; color: #f8fafc; display: flex; align-items: center; gap: 8px;">
+                  Active Engine: White Box Level 2 Data Flow Analyzer
+                  <span style="background: var(--color-success); color: #0b0f19; font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 30px; text-transform: uppercase; letter-spacing: 0.5px;">Auto-Enabled</span>
+                </h3>
+                <p style="margin: 0; font-size: 12px; color: #cbd5e1; line-height: 1.5;">
+                  Uploading source code (via ZIP, Git repo or Pasted Code) automatically initiates static AST mapping and interprocedural taint flow analysis. The scanner maps controller routes directly to dynamic API endpoints and highlights user inputs reaching critical execution sinks.
+                </p>
+              </div>
+            </div>
+
             <div class="card-tabs">
               <button class="card-tab-btn active" id="tab-btn-zip" onclick="switchScanMode('zip')">
                 <i class="fa-solid fa-file-zipper"></i> ZIP File
@@ -257,185 +442,7 @@
         </div>
       </section>
 
-      <!-- TAB: REPORT VIEWER (Populated dynamically) -->
-      <section id="tab-report-viewer" class="tab-pane">
-        
-        <!-- Report Header / Action Toolbar -->
-        <div class="report-toolbar content-card">
-          <div class="report-title-section">
-            <span class="badge" id="report-badge-status">Semgrep + SAST</span>
-            <h2 id="report-title-h2">Project Security Audit</h2>
-            <p id="report-date-text">Scanned on: Jun 09, 2026</p>
-          </div>
-          <div class="report-action-buttons">
-            <button class="btn btn-secondary btn-sm" onclick="exportReport('markdown')">
-              <i class="fa-brands fa-markdown"></i> Markdown
-            </button>
-            <button class="btn btn-secondary btn-sm" onclick="exportReport('html')">
-              <i class="fa-solid fa-code"></i> HTML
-            </button>
-            <button class="btn btn-secondary btn-sm" onclick="exportReport('json')">
-              <i class="fa-solid fa-brackets-curly"></i> JSON
-            </button>
-            <button class="btn btn-secondary btn-sm" onclick="exportReport('pdf')" style="background: rgba(244, 63, 94, 0.1); border-color: rgba(244, 63, 94, 0.2); color: #f43f5e;">
-              <i class="fa-solid fa-file-pdf"></i> Export PDF
-            </button>
-            <button class="btn btn-primary btn-sm" onclick="exportReport('doc')">
-              <i class="fa-solid fa-file-word"></i> Export Word (DOC)
-            </button>
-          </div>
-        </div>
 
-        <!-- Grade and Risk Summary Row -->
-        <div class="report-overview-grid">
-          
-          <!-- Grade Dial Card -->
-          <div class="grade-card content-card">
-            <div class="grade-ring-wrapper">
-              <div class="grade-ring" id="report-grade-ring">
-                <span id="report-grade-letter">A</span>
-              </div>
-            </div>
-            <div class="grade-details">
-              <h3>Security Grade</h3>
-              <p id="report-grade-rating">Secure Environment</p>
-              <div class="score-line">
-                <span>Security Posture Index:</span>
-                <strong id="report-score-index">100/100</strong>
-              </div>
-            </div>
-          </div>
-
-          <!-- Severity Summary Counts -->
-          <div class="severity-card content-card">
-            <h3>Threat Count Breakdown</h3>
-            <div class="severity-counts-bar">
-              <div class="sev-item critical">
-                <span class="count-num" id="report-count-critical">0</span>
-                <span class="count-lbl">Critical</span>
-              </div>
-              <div class="sev-item high">
-                <span class="count-num" id="report-count-high">0</span>
-                <span class="count-lbl">High</span>
-              </div>
-              <div class="sev-item medium">
-                <span class="count-num" id="report-count-medium">0</span>
-                <span class="count-lbl">Medium</span>
-              </div>
-              <div class="sev-item low">
-                <span class="count-num" id="report-count-low">0</span>
-                <span class="count-lbl">Low</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Quick Stats -->
-          <div class="quick-stats-card content-card">
-            <h3>Audit Statistics</h3>
-            <ul class="stats-list">
-              <li>
-                <span>Files Audited:</span>
-                <strong id="report-stat-files">0</strong>
-              </li>
-              <li>
-                <span>Total Findings:</span>
-                <strong id="report-stat-findings">0</strong>
-              </li>
-              <li>
-                <span>Engine Used:</span>
-                <strong id="report-stat-engine">Semgrep</strong>
-              </li>
-              <li>
-                <span>Common Vulnerability:</span>
-                <strong id="report-stat-common">None</strong>
-              </li>
-            </ul>
-          </div>
-
-        </div>
-
-        <!-- AI Audit Section -->
-        <div class="content-card" id="report-ai-card" style="display: none;">
-          <div class="ai-header-row">
-            <div class="ai-badge-title">
-              <i class="fa-solid fa-user-secret ai-icon-detective"></i>
-              <h2>AI Detective Threat Insights</h2>
-            </div>
-            <span class="badge success" id="ai-mode-badge">Claude 3.5 Sonnet</span>
-          </div>
-          
-          <!-- AI Content Box (Shown if AI Analysis is present) -->
-          <div class="ai-analysis-content" id="ai-analysis-details" style="display: none;">
-            <div class="ai-grid-panels">
-              <!-- Executive Summary & Attack Chain Timeline -->
-              <div class="ai-left-panel">
-                <div class="detail-section-title">AI Executive Summary</div>
-                <div class="ai-summary-text" id="ai-summary-box"></div>
-                
-                <div class="detail-section-title" style="margin-top:20px;">Threat Chain Analysis</div>
-                <div class="ai-timeline" id="ai-timeline-box"></div>
-              </div>
-              
-              <!-- Remediation Priority list -->
-              <div class="ai-right-panel">
-                <div class="detail-section-title">AI Remediation Priority Rankings</div>
-                <div class="ai-priority-list" id="ai-priority-box"></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Launch AI Card (Shown if AI Analysis is NOT present) -->
-          <div class="ai-launch-box" id="ai-analysis-launch">
-            <div class="ai-launch-inner">
-              <i class="fa-solid fa-magnifying-glass-chart ai-launch-icon"></i>
-              <h3>Audit Codebase with AI Detective</h3>
-              <p>Trigger Claude 3.5 Sonnet to chain findings into realistic hacker exploit scenarios, model threat entry vectors, and compile prioritized mitigation checklists.</p>
-              <button class="btn btn-primary btn-lg mt-15" id="btn-launch-ai-audit" onclick="launchAiAudit()">
-                <i class="fa-solid fa-wand-magic-sparkles"></i> Launch AI Security Audit
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Chart Analytics Card Row -->
-        <div class="charts-row-grid">
-          <div class="chart-container-card content-card">
-            <h3>Vulnerabilities by Severity</h3>
-            <div class="chart-canvas-wrapper">
-              <canvas id="chart-severity"></canvas>
-            </div>
-          </div>
-          <div class="chart-container-card content-card">
-            <h3>Vulnerabilities by OWASP Category</h3>
-            <div class="chart-canvas-wrapper">
-              <canvas id="chart-owasp"></canvas>
-            </div>
-          </div>
-        </div>
-
-        <!-- Findings List -->
-        <div class="content-card mt-25">
-          <div class="findings-filter-header">
-            <h2>Detailed Vulnerability Catalog</h2>
-            <div class="filters-row">
-              <input type="text" id="finding-search-input" placeholder="Search by name, file or rule ID..." oninput="filterFindings()">
-              <select id="finding-severity-filter" onchange="filterFindings()">
-                <option value="ALL">All Severities</option>
-                <option value="CRITICAL">🔴 Critical Only</option>
-                <option value="HIGH">🟠 High Only</option>
-                <option value="MEDIUM">🟡 Medium Only</option>
-                <option value="LOW">🔵 Low Only</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- Findings Accordion -->
-          <div class="findings-accordion" id="findings-list-accordion">
-            <!-- Populated via JavaScript -->
-          </div>
-        </div>
-
-      </section>
 
       <!-- TAB: SAVED REPORTS -->
       <section id="tab-reports" class="tab-pane">
@@ -454,7 +461,7 @@
                   <th>Project Name</th>
                   <th>Grade</th>
                   <th>Score</th>
-                  <th>Issues (C/H/M/L)</th>
+                  <th>Issues (C/H/M)</th>
                   <th>Files Scanned</th>
                   <th>Audit Date</th>
                   <th>Actions</th>
@@ -715,7 +722,36 @@
 
   </div>
 
-  <!-- JavaScript logic file -->
-  <script src="app.js"></script>
+  <!-- Glassmorphic Authentication Overlay Modal -->
+  <div id="auth-modal" class="glass-modal-overlay" style="display: flex;">
+    <div class="glass-modal-card">
+      <div class="auth-brand">
+        <h2>AI_DETECTIVE // SECURE ACCESS</h2>
+        <p>ENTER CONSOLE CREDENTIALS TO LOAD THREAT MATRIX</p>
+      </div>
+      
+      <div class="auth-form">
+        <div class="form-group">
+          <label for="auth-username">USERNAME</label>
+          <input type="text" id="auth-username" autocomplete="off" placeholder="auditor_name">
+        </div>
+        
+        <div class="form-group">
+          <label for="auth-password">PASSWORD</label>
+          <input type="password" id="auth-password" placeholder="••••••••">
+        </div>
+        
+        <div id="auth-error-msg" class="auth-error-box" style="display: none;"></div>
+        
+        <div class="auth-buttons">
+          <button id="auth-login-btn" onclick="handleLoginSubmit()" class="btn btn-blue font-mono" style="padding: 10px; border-radius: 6px; cursor: pointer; font-size: 11px;">LOGIN</button>
+          <button id="auth-register-btn" onclick="handleRegisterSubmit()" class="btn btn-purple font-mono" style="padding: 10px; border-radius: 6px; cursor: pointer; font-size: 11px;">REGISTER</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript modular logic entrypoint -->
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>

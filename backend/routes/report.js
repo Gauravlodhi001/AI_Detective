@@ -5,6 +5,9 @@ const fs = require('fs');
 const { buildHtmlReport, buildDocReport } = require('../parsers/report_builder');
 const { buildCodePdfReport } = require('../parsers/code_pdf_builder');
 const { buildPdfReport } = require('../parsers/pdf_builder');
+const { requireRole } = require('../utils/auth');
+const logger = require('../utils/logger');
+const { decrypt } = require('../utils/crypto');
 
 const REPORTS_DIR = path.join(__dirname, '../../reports');
 
@@ -34,7 +37,7 @@ router.get('/list', (req, res, next) => {
         try {
           const filePath = path.join(REPORTS_DIR, file);
           const rawContent = fs.readFileSync(filePath, 'utf8');
-          const data = JSON.parse(rawContent);
+          const data = JSON.parse(decrypt(rawContent));
 
           reports.push({
             id: data.id || data.reportId,
@@ -73,7 +76,7 @@ router.get('/:id', (req, res, next) => {
 
   try {
     const rawContent = fs.readFileSync(reportPath, 'utf8');
-    const data = JSON.parse(rawContent);
+    const data = JSON.parse(decrypt(rawContent));
     res.json(data);
   } catch (err) {
     next(err);
@@ -84,7 +87,7 @@ router.get('/:id', (req, res, next) => {
  * @route DELETE /api/reports/:id
  * @desc Delete report files
  */
-router.delete('/:id', (req, res, next) => {
+router.delete('/:id', requireRole(['admin']), (req, res, next) => {
   const jsonPath = getReportFilePath(req.params.id, 'json');
   const mdPath = getReportFilePath(req.params.id, 'md');
 
@@ -101,6 +104,7 @@ router.delete('/:id', (req, res, next) => {
     }
 
     if (deleted) {
+      logger.info(`[AUDIT] Report deleted successfully: ${req.params.id} by user ${req.user.username}`);
       res.json({ success: true, message: 'Report deleted successfully' });
     } else {
       res.status(404).json({ success: false, message: 'Report not found' });
@@ -124,7 +128,7 @@ router.get('/:id/download', async (req, res, next) => {
 
   try {
     const rawContent = fs.readFileSync(jsonPath, 'utf8');
-    const reportData = JSON.parse(rawContent);
+    const reportData = JSON.parse(decrypt(rawContent));
 
     if (format === 'markdown' || format === 'md') {
       const mdPath = getReportFilePath(req.params.id, 'md');
@@ -177,7 +181,7 @@ router.get('/:id/pdf', (req, res, next) => {
 
   try {
     const rawContent = fs.readFileSync(jsonPath, 'utf8');
-    const reportData = JSON.parse(rawContent);
+    const reportData = JSON.parse(decrypt(rawContent));
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${reportData.projectName || 'wapt'}-security-report.pdf"`);

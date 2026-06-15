@@ -178,7 +178,7 @@
   grid-template-columns: 320px 1fr 320px;
   gap: 16px;
   width: 100%;
-  height: calc(100vh - 260px); /* Responsive viewport calculation excluding header/footer */
+  height: calc(100vh - 350px); /* Responsive viewport calculation adjusted for toolbar & sub-tabs */
   min-height: 520px;
   overflow: hidden;
 }
@@ -228,3 +228,60 @@
   border: 1px solid var(--border-color);
   border-radius: 4px;
 }
+
+/* ==========================================================================
+   Report Toolbar, Sub-tabs & Dropdown Styles
+   ========================================================================== */
+.btn-purple {
+  background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(168, 85, 247, 0.4) !important;
+  transition: filter var(--transition-fast) !important;
+}
+.btn-purple:hover {
+  filter: brightness(1.15) !important;
+}
+
+.btn-blue {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(37, 99, 235, 0.4) !important;
+  transition: filter var(--transition-fast) !important;
+}
+.btn-blue:hover {
+  filter: brightness(1.15) !important;
+}
+
+.btn-grey {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--border-color) !important;
+  transition: background var(--transition-fast) !important;
+}
+.btn-grey:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.subtab-btn {
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  color: var(--text-muted) !important;
+}
+.subtab-btn:hover {
+  color: var(--text-main) !important;
+}
+.subtab-btn.active {
+  background: rgba(255, 159, 28, 0.08) !important;
+  border-color: rgba(255, 159, 28, 0.25) !important;
+  color: var(--color-accent) !important;
+  font-weight: 600 !important;
+}
+
+.dropdown-item {
+  transition: background var(--transition-fast) !important;
+}
+.dropdown-item:hover {
+  background: rgba(255, 159, 28, 0.08) !important;
+  color: var(--color-accent) !important;
+}
+

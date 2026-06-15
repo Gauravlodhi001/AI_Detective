@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AI_DETECTIVE // TACTICAL_OS_V4.2</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<style>
+        @keyframes pulse-led {
+            0%, 100% { opacity: 1; filter: brightness(1.2) drop-shadow(0 0 2px var(--led-color)); }
+            50% { opacity: 0.4; filter: brightness(0.8); }
+        }
+        .animate-pulse-led { animation: pulse-led 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        
+        .scanlines {
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(to bottom, transparent 50%, rgba(0, 0, 0, 0.05) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .glass-hud {
+            backdrop-filter: blur(12px);
+            background: rgba(20, 19, 19, 0.7);
+            border: 1px solid #4e453a;
+        }
+
+        .terminal-scroll::-webkit-scrollbar { width: 4px; }
+        .terminal-scroll::-webkit-scrollbar-track { background: #0e0e0e; }
+        .terminal-scroll::-webkit-scrollbar-thumb { background: #4e453a; }
+
+        .bezel-frame {
+            border: 12px solid #2b2a2a;
+            box-shadow: inset 0 0 40px rgba(0,0,0,0.8);
+        }
+
+        .bracket-btn {
+            position: relative;
+            transition: all 0.2s ease;
+        }
+        .bracket-btn:active { transform: scale(0.95); }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-bright": "#3a3939",
+                        "vulnerability-red": "#ffb4ab",
+                        "error": "#ffb4ab",
+                        "surface-container-high": "#2a2a2a",
+                        "on-primary": "#432c00",
+                        "secondary": "#b0c6ff",
+                        "secondary-container": "#0068ed",
+                        "tertiary-fixed": "#ffe170",
+                        "tertiary-fixed-dim": "#e9c400",
+                        "surface-dim": "#131313",
+                        "surface-container-low": "#1c1b1b",
+                        "secondary-fixed": "#d9e2ff",
+                        "on-secondary-container": "#f2f3ff",
+                        "tertiary": "#fff9f1",
+                        "on-tertiary": "#3a3000",
+                        "on-surface": "#e5e2e1",
+                        "outline": "#9a8f81",
+                        "on-secondary": "#002d6e",
+                        "on-tertiary-container": "#736000",
+                        "surface-container": "#201f1f",
+                        "on-surface-variant": "#d1c5b6",
+                        "primary": "#fff8f4",
+                        "secondary-fixed-dim": "#b0c6ff",
+                        "surface": "#131313",
+                        "on-secondary-fixed-variant": "#00429b",
+                        "surface-container-highest": "#353534",
+                        "on-error-container": "#ffdad6",
+                        "primary-fixed": "#ffdead",
+                        "tertiary-container": "#ffdb47",
+                        "on-error": "#690005",
+                        "on-tertiary-fixed-variant": "#544600",
+                        "background": "#131313",
+                        "surface-tint": "#e7c186",
+                        "on-background": "#e5e2e1",
+                        "on-secondary-fixed": "#001945",
+                        "primary-container": "#ffd79b",
+                        "inverse-primary": "#765929",
+                        "inverse-surface": "#e5e2e1",
+                        "on-primary-fixed": "#281900",
+                        "on-primary-container": "#795c2b",
+                        "surface-variant": "#353534",
+                        "primary-fixed-dim": "#e7c186",
+                        "error-container": "#93000a",
+                        "scanline-opacity": "0.03",
+                        "surface-container-lowest": "#0e0e0e",
+                        "on-tertiary-fixed": "#221b00",
+                        "bezel-grey": "#2b2a2a",
+                        "inverse-on-surface": "#313030",
+                        "on-primary-fixed-variant": "#5c4214",
+                        "outline-variant": "#4e453a"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["JetBrains Mono"],
+                        "headline-lg": ["JetBrains Mono"],
+                        "display-lg": ["JetBrains Mono"],
+                        "headline-sm": ["JetBrains Mono"],
+                        "label-caps": ["JetBrains Mono"],
+                        "code-sm": ["JetBrains Mono"],
+                        "body-lg": ["JetBrains Mono"],
+                        "body-md": ["JetBrains Mono"]
+                    },
+                    "spacing": {
+                        "bezel-width": "12px",
+                        "gutter": "16px"
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-surface font-body-md text-body-md overflow-hidden selection:bg-primary-container selection:text-on-primary-container">
+<!-- Global Bezel Frame -->
+<div class="fixed inset-0 bezel-frame pointer-events-none z-[60]">
+<!-- LED Indicators in Corners -->
+<div class="absolute top-2 left-2 flex gap-2">
+<div class="w-2 h-2 bg-vulnerability-red animate-pulse-led" style="--led-color: #ffb4ab"></div>
+<div class="w-2 h-2 bg-primary-container animate-pulse-led" style="--led-color: #ffd79b; animation-delay: 0.5s"></div>
+</div>
+<div class="absolute top-2 right-2 flex gap-2">
+<div class="w-2 h-2 bg-secondary animate-pulse-led" style="--led-color: #b0c6ff; animation-delay: 1s"></div>
+<div class="w-2 h-2 bg-surface-bright border border-outline-variant"></div>
+</div>
+</div>
+<!-- Scanline Overlay -->
+<div class="scanlines"></div>
+<!-- Background Shader -->
+<!-- STITCH_SHADER_START:ANIMATION_17 class="fixed inset-0 w-full h-full opacity-40" -->
+<div class="fixed inset-0 w-full h-full opacity-40" style="display:block;">
+<canvas id="shader-canvas-ANIMATION_17" style="display:block;width:100%;height:100%"></canvas>
+<script>
+(function() {
+  const canvas = document.getElementById('shader-canvas-ANIMATION_17');
+
+  // Sync the WebGL drawing-buffer size with the CSS-driven layout size.
+  // This fires on initial layout and whenever the element is resized.
+  function syncSize() {
+    const w = canvas.clientWidth  || 1280;
+    const h = canvas.clientHeight || 720;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width  = w;
+      canvas.height = h;
+    }
+  }
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncSize).observe(canvas);
+  }
+  syncSize();
+
+  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (!gl) return;
+  const vs = `attribute vec2 a_position;
+varying vec2 v_texCoord;
+void main() {
+  v_texCoord = a_position * 0.5 + 0.5;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}`;
+  const fs = `
+precision highp float;
+varying vec2 v_texCoord;
+uniform float u_time;
+uniform vec2 u_resolution;
+ 
+float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+
+void main() {
+    vec2 uv = v_texCoord;
+    vec3 color = vec3(0.04, 0.04, 0.06); // Deep Charcoal
+    
+    // Brushed Metal Effect
+    float n = hash(uv * vec2(1.0, 500.0));
+    color += n * 0.02;
+    
+    // Vignette
+    float d = length(uv - 0.5);
+    color *= smoothstep(0.8, 0.3, d);
+    
+    // Subtle scanlines
+    float scan = sin(uv.y * 800.0) * 0.015;
+    color -= scan;
+
+    // Glowing amber bleed from corners
+    float bleed = smoothstep(0.5, 0.0, length(uv - vec2(0.0, 1.0))) * 0.05;
+    color += vec3(1.0, 0.7, 0.0) * bleed;
+
+    gl_FragColor = vec4(color, 1.0);
+}
+`;
+  function cs(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, cs(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, cs(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const pos = gl.getAttribLocation(prog, 'a_position');
+  gl.enableVertexAttribArray(pos);
+  gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+  const uTime = gl.getUniformLocation(prog, 'u_time');
+  const uRes = gl.getUniformLocation(prog, 'u_resolution');
+  const uMouse = gl.getUniformLocation(prog, 'u_mouse');
+
+  // u_mouse is in pixel coordinates matching u_resolution (ShaderToy convention).
+  // Shaders that need normalized coords should use: u_mouse / u_resolution.
+  let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+  window.addEventListener('mousemove', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width && rect.height) {
+      const nx = (event.clientX - rect.left) / rect.width;
+      const ny = 1.0 - (event.clientY - rect.top) / rect.height;
+      mouse.x = nx * canvas.width;
+      mouse.y = ny * canvas.height;
+    }
+  });
+
+  function render(t) {
+    if (typeof ResizeObserver === 'undefined') syncSize();
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    if (uTime) gl.uniform1f(uTime, t * 0.001);
+    if (uRes) gl.uniform2f(uRes, canvas.width, canvas.height);
+    if (uMouse) gl.uniform2f(uMouse, mouse.x, mouse.y);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(render);
+  }
+  render(0);
+})();
+</script>
+</div>
+<!-- STITCH_SHADER_END:ANIMATION_17 -->
+<!-- TopNavBar -->
+<header class="fixed top-0 w-full z-50 flex items-center justify-between px-gutter h-16 border-b-2 border-outline-variant bg-surface-container-low shadow-[0_0_20px_rgba(255,186,56,0.05)] ml-[12px] mr-[12px] mt-[12px] w-[calc(100%-24px)]">
+<div class="flex items-center gap-8">
+<h1 class="font-display-lg text-[24px] tracking-tighter text-primary">AI_DETECTIVE</h1>
+<nav class="hidden md:flex items-center gap-4">
+<a class="text-on-surface-variant font-medium px-2 hover:text-primary transition-colors duration-150" href="#">THREAT_LOG</a>
+<a class="text-primary font-bold before:content-['['] after:content-[']'] px-2 hover:text-primary transition-colors duration-150 uppercase" href="#">[CORRELATION GRID]</a>
+<a class="text-on-surface-variant font-medium px-2 hover:text-primary transition-colors duration-150" href="#">NODE_MAP</a>
+<a class="text-on-surface-variant font-medium px-2 hover:text-primary transition-colors duration-150" href="#">ASSETS</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="bg-surface-container-highest px-3 py-1 flex items-center gap-2 border border-outline-variant">
+<span class="material-symbols-outlined text-[16px] text-primary">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-code-sm font-code-sm text-primary placeholder:text-on-surface-variant/40 w-48" placeholder="QUERY_CORE..." type="text"/>
+</div>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary active:scale-95 transition-all">notifications</button>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary active:scale-95 transition-all">settings</button>
+</div>
+</header>
+<main class="relative h-screen w-full pt-16 pb-8 px-[12px] flex overflow-hidden">
+<!-- Left Sidebar: Code Analysis -->
+<aside class="w-80 h-full flex flex-col gap-4 p-4 z-20">
+<!-- Command Injection Risk -->
+<section class="glass-hud p-4 border-l-2 border-vulnerability-red">
+<h3 class="font-label-caps text-label-caps text-vulnerability-red mb-3">COMMAND_INJECTION_RISK</h3>
+<div class="bg-surface-container-lowest p-2 rounded border border-outline-variant font-code-sm text-code-sm overflow-x-hidden">
+<div class="text-on-surface-variant mb-1">/routes/common/utils.js:L114</div>
+<div class="text-primary truncate">
+<span class="text-secondary">exec</span>('ping' + <span class="text-tertiary">req.body.ip</span>)
+                    </div>
+<div class="mt-2 flex items-center gap-1 text-[10px] text-vulnerability-red/60">
+<span class="material-symbols-outlined text-[12px]">warning</span>
+                        UNSANITIZED_USER_INPUT
+                    </div>
+</div>
+</section>
+<!-- Mitigation Diff -->
+<section class="glass-hud p-4 flex-1 flex flex-col min-h-0">
+<h3 class="font-label-caps text-label-caps text-primary mb-3">MITIGATION_DIFF</h3>
+<div class="flex-1 bg-surface-container-lowest p-2 border border-outline-variant font-code-sm text-code-sm overflow-y-auto terminal-scroll space-y-1">
+<div class="bg-red-900/20 text-red-400 px-1">- exec('ping' + ip)</div>
+<div class="bg-green-900/20 text-green-400 px-1">+ spawn('ping', [ip])</div>
+<div class="opacity-30">... other logic ...</div>
+</div>
+<div class="mt-4 flex flex-col gap-2">
+<button class="w-full bg-transparent border border-primary text-primary font-label-caps py-2 hover:bg-primary/10 transition-colors uppercase">
+                        [EXPORT PDF REPORT]
+                    </button>
+<button class="w-full bg-primary-container text-on-primary-container font-label-caps py-2 font-bold hover:brightness-110 transition-all uppercase">
+                        [MITIGATE VIA PATCH]
+                    </button>
+</div>
+</section>
+</aside>
+<!-- Central Canvas -->
+<section class="flex-1 relative h-full">
+<!-- STITCH_THREEJS_START:ANIMATION_16 class="absolute inset-0 w-full h-full" -->
+<div class="absolute inset-0 w-full h-full" style="display:block;">
+<script src="https://ajax.googleapis.com/ajax/libs/threejs/r125/three.min.js"></script>
+<div id="threejs-container-ANIMATION_16" style="width:100%;height:100%"></div>
+<script>
+(function() {
+  const container = document.getElementById('threejs-container-ANIMATION_16');
+  
+  const width = container.clientWidth || window.innerWidth;
+  const height = container.clientHeight || window.innerHeight;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  renderer.setSize(width, height);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  container.appendChild(renderer.domElement);
+
+  // Central Posture Node (Epicenter)
+  const epicenterGroup = new THREE.Group();
+  scene.add(epicenterGroup);
+
+  const ringGeo = new THREE.TorusGeometry(1.2, 0.02, 16, 100);
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xffb300, transparent: true, opacity: 0.5 });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  epicenterGroup.add(ring);
+
+  const coreGeo = new THREE.SphereGeometry(0.5, 32, 32);
+  const coreMat = new THREE.MeshPhongMaterial({ color: 0xffd600, emissive: 0xffb300, emissiveIntensity: 0.5 });
+  const core = new THREE.Mesh(coreGeo, coreMat);
+  epicenterGroup.add(core);
+
+  // Nodes & Connections
+  const nodes = new THREE.Group();
+  scene.add(nodes);
+
+  function createNode(color, pos, size = 0.15) {
+      const geo = new THREE.SphereGeometry(size, 16, 16);
+      const mat = new THREE.MeshPhongMaterial({ color: color, emissive: color, emissiveIntensity: 0.6 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.copy(pos);
+      nodes.add(mesh);
+      
+      // Line to center
+      const lineMat = new THREE.LineBasicMaterial({ color: color, transparent: true, opacity: 0.2 });
+      const points = [new THREE.Vector3(0, 0, 0), pos];
+      const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+      const line = new THREE.Line(lineGeo, lineMat);
+      scene.add(line);
+      
+      return mesh;
+  }
+
+  // SAST (Blue)
+  for(let i=0; i<8; i++) {
+      const angle = (i/8) * Math.PI * 2;
+      createNode(0x2979ff, new THREE.Vector3(Math.cos(angle)*3, Math.sin(angle)*3, (Math.random()-0.5)*2));
+  }
+
+  // SCA (Yellow)
+  for(let i=0; i<6; i++) {
+      const angle = (i/6) * Math.PI * 2 + 0.5;
+      createNode(0xffd600, new THREE.Vector3(Math.cos(angle)*4.5, Math.sin(angle)*4.5, (Math.random()-0.5)*2));
+  }
+
+  // WAPT Correlation Bridge (Orange Highway)
+  const bridgeCurve = new THREE.QuadraticBezierCurve3(
+      new THREE.Vector3(-6, -2, 0),
+      new THREE.Vector3(0, 2, 0),
+      new THREE.Vector3(6, -2, 0)
+  );
+  const bridgePoints = bridgeCurve.getPoints(50);
+  const bridgeGeo = new THREE.BufferGeometry().setFromPoints(bridgePoints);
+  const bridgeMat = new THREE.LineBasicMaterial({ color: 0xffb300, transparent: true, opacity: 0.6 });
+  const bridgeLine = new THREE.Line(bridgeGeo, bridgeMat);
+  scene.add(bridgeLine);
+
+  // Pulsing nodes on the bridge
+  const bridgeNodes = [];
+  for(let i=0; i<3; i++) {
+      const n = createNode(0xffb300, bridgeCurve.getPoint(0.2 + i*0.3), 0.2);
+      bridgeNodes.push(n);
+  }
+
+  // Lights
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+  scene.add(ambientLight);
+  const pointLight = new THREE.PointLight(0xffffff, 1);
+  pointLight.position.set(5, 5, 5);
+  scene.add(pointLight);
+
+  camera.position.z = 8;
+
+  function animate() {
+      requestAnimationFrame(animate);
+      epicenterGroup.rotation.z += 0.005;
+      nodes.rotation.y += 0.002;
+      
+      const time = Date.now() * 0.002;
+      bridgeNodes.forEach((n, i) => {
+          n.scale.setScalar(1 + Math.sin(time + i) * 0.2);
+      });
+      
+      renderer.render(scene, camera);
+  }
+
+  window.addEventListener('resize', () => {
+      const w = container.clientWidth || window.innerWidth;
+      const h = container.clientHeight || window.innerHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+  });
+
+  animate();
+
+})();
+</script>
+</div>
+<!-- STITCH_THREEJS_END:ANIMATION_16 -->
+<!-- Posture Node Dial -->
+<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+<div class="relative w-64 h-64 flex items-center justify-center">
+<!-- Rotating Dashed Circles -->
+<div class="absolute inset-0 border-4 border-dashed border-primary/20 rounded-full animate-[spin_20s_linear_infinite]"></div>
+<div class="absolute inset-4 border-2 border-dashed border-primary-container/40 rounded-full animate-[spin_10s_linear_infinite_reverse]"></div>
+<div class="text-center z-10 glass-hud w-40 h-40 rounded-full flex flex-col items-center justify-center border-2 border-primary-container shadow-[0_0_30px_rgba(255,215,155,0.2)]">
+<div class="font-display-lg text-primary-container text-[40px] leading-none">82</div>
+<div class="font-label-caps text-label-caps text-primary tracking-widest mt-1">SIGNAL</div>
+<div class="h-px w-12 bg-outline-variant my-2"></div>
+<div class="font-code-sm text-code-sm text-secondary flex items-center gap-1">
+<span class="w-2 h-2 bg-secondary rounded-full animate-pulse"></span>
+                            STABLE
+                        </div>
+</div>
+</div>
+</div>
+<!-- Contextual Floating Details -->
+<div class="absolute bottom-4 left-4 glass-hud px-4 py-2 border-l-4 border-primary">
+<div class="text-label-caps font-label-caps text-on-surface-variant">ACTIVE_NODE</div>
+<div class="text-headline-sm font-headline-sm text-primary">CORE_ROUTER_01</div>
+</div>
+</section>
+<!-- Right Sidebar: Metrics -->
+<aside class="w-80 h-full flex flex-col gap-4 p-4 z-20">
+<div class="grid grid-cols-2 gap-2">
+<div class="glass-hud p-3 border-t-2 border-primary">
+<div class="text-label-caps font-label-caps text-on-surface-variant text-[10px]">FINDINGS</div>
+<div class="text-headline-lg font-headline-lg text-primary">07</div>
+</div>
+<div class="glass-hud p-3 border-t-2 border-vulnerability-red">
+<div class="text-label-caps font-label-caps text-on-surface-variant text-[10px]">CRITICAL</div>
+<div class="text-headline-lg font-headline-lg text-vulnerability-red">01</div>
+</div>
+</div>
+<!-- Privilege Audit Matrix -->
+<section class="glass-hud p-4">
+<h3 class="font-label-caps text-label-caps text-primary mb-3">PRIVILEGE_AUDIT_MATRIX</h3>
+<div class="h-32 flex items-end justify-between gap-1 border-b border-outline-variant">
+<div class="flex-1 bg-secondary-container h-[40%] relative group">
+<div class="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">USR</div>
+</div>
+<div class="flex-1 bg-primary-container h-[85%] relative group"></div>
+<div class="flex-1 bg-secondary-container h-[60%] relative group"></div>
+<div class="flex-1 bg-vulnerability-red h-[30%] relative group"></div>
+<div class="flex-1 bg-primary-container h-[95%] relative group"></div>
+</div>
+</section>
+<!-- Radar Chart (Speedometer Style) -->
+<section class="glass-hud p-4 flex flex-col items-center">
+<h3 class="font-label-caps text-label-caps text-primary self-start mb-3">MULTI_AXIS_RISK</h3>
+<div class="relative w-32 h-32 flex items-center justify-center">
+<svg class="w-full h-full rotate-[-90deg]">
+<circle cx="64" cy="64" fill="none" r="50" stroke="#2a2a2a" stroke-width="8"></circle>
+<circle cx="64" cy="64" fill="none" r="50" stroke="#ffd79b" stroke-dasharray="314" stroke-dashoffset="62" stroke-width="8"></circle>
+</svg>
+<div class="absolute inset-0 flex items-center justify-center">
+<div class="text-center">
+<span class="text-headline-sm font-headline-sm text-primary-container">80%</span>
+</div>
+</div>
+</div>
+<div class="mt-4 grid grid-cols-2 gap-x-4 gap-y-1 w-full text-[10px] font-code-sm">
+<div class="flex justify-between"><span>EXT:</span><span class="text-primary">4.2</span></div>
+<div class="flex justify-between"><span>INT:</span><span class="text-primary">2.1</span></div>
+<div class="flex justify-between"><span>MEM:</span><span class="text-primary">0.8</span></div>
+<div class="flex justify-between"><span>SQL:</span><span class="text-vulnerability-red">9.1</span></div>
+</div>
+</section>
+<!-- Trend Line -->
+<section class="glass-hud p-4 flex-1">
+<h3 class="font-label-caps text-label-caps text-primary mb-3">CRITICAL_FINDINGS_30D</h3>
+<div class="relative h-full w-full bg-surface-container-lowest/50 overflow-hidden">
+<svg class="w-full h-24 stroke-secondary fill-none stroke-2" viewbox="0 0 200 100">
+<path d="M0,80 L20,70 L40,85 L60,40 L80,50 L100,20 L120,45 L140,10 L160,30 L180,25 L200,5"></path>
+</svg>
+<div class="mt-2 text-[8px] flex justify-between text-on-surface-variant font-code-sm uppercase">
+<span>Day_01</span>
+<span>Day_15</span>
+<span>Day_30</span>
+</div>
+</div>
+</section>
+</aside>
+</main>
+<!-- Bottom: SCAN_LOG Terminal -->
+<footer class="fixed bottom-3 left-[20px] right-[20px] h-32 glass-hud z-50 flex flex-col border-t-2 border-outline-variant overflow-hidden">
+<div class="flex items-center justify-between px-4 py-1 bg-surface-container-high border-b border-outline-variant">
+<div class="flex items-center gap-4">
+<span class="font-label-caps text-label-caps text-primary">SCAN_LOG_V2.0.4</span>
+<div class="flex gap-1">
+<div class="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+<div class="w-1.5 h-1.5 bg-green-500/30 rounded-full"></div>
+</div>
+</div>
+<div class="flex gap-2">
+<button class="text-label-caps font-label-caps text-on-surface-variant hover:text-primary transition-colors">[PAUSE]</button>
+<button class="text-label-caps font-label-caps text-on-surface-variant hover:text-primary transition-colors">[FILTER]</button>
+<button class="text-label-caps font-label-caps text-on-surface-variant hover:text-primary transition-colors">[CLEAR]</button>
+</div>
+</div>
+<div class="flex-1 p-3 bg-surface-container-lowest font-code-sm text-code-sm terminal-scroll overflow-y-auto overflow-x-hidden space-y-1">
+<div class="flex gap-4">
+<span class="text-on-surface-variant opacity-40">14:02:11</span>
+<span class="text-secondary">[SEMGREP]</span>
+<span class="text-on-surface">Scanning /app/core/auth.py... Found 0 issues.</span>
+</div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant opacity-40">14:02:15</span>
+<span class="text-primary-container">[CLAUDE_ENGINE]</span>
+<span class="text-on-surface">Heuristic analysis of Correlation_Graph_Node_77 complete. Result: Low Latency.</span>
+</div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant opacity-40">14:02:18</span>
+<span class="text-vulnerability-red">[ALERT]</span>
+<span class="text-on-surface">Potential SSRF detected in request to: internal.infra.metadata.service</span>
+</div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant opacity-40">14:02:22</span>
+<span class="text-secondary">[SEMGREP]</span>
+<span class="text-on-surface">Analyzing trace path for CVE-2024-9122... 12% complete.</span>
+</div>
+<div class="flex gap-4 items-center">
+<span class="text-on-surface-variant opacity-40">14:02:25</span>
+<span class="text-primary-container">[SYSTEM]</span>
+<span class="text-on-surface flex items-center gap-1">Awaiting operator input... <span class="w-2 h-4 bg-primary-container animate-pulse"></span></span>
+</div>
+</div>
+</footer>
+<script>
+        // Micro-interactions for terminal
+        const terminal = document.querySelector('.terminal-scroll');
+        setInterval(() => {
+            if (terminal.scrollTop + terminal.clientHeight >= terminal.scrollHeight - 20) {
+                terminal.scrollTop = terminal.scrollHeight;
+            }
+        }, 1000);
+    </script>
+</body></html>

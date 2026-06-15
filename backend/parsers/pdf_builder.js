@@ -177,20 +177,18 @@ function buildPdfReport(reportData, res) {
   // Table Header
   doc.rect(50, tableTop, 490, 20).fill(colors.accentLight);
   doc.fillColor(colors.primary);
-  doc.text('CRITICAL', 60, tableTop + 6, { width: 90, align: 'center' });
-  doc.text('HIGH', 150, tableTop + 6, { width: 90, align: 'center' });
-  doc.text('MEDIUM', 240, tableTop + 6, { width: 90, align: 'center' });
-  doc.text('LOW', 330, tableTop + 6, { width: 90, align: 'center' });
-  doc.text('INFO', 420, tableTop + 6, { width: 110, align: 'center' });
+  doc.text('CRITICAL', 60, tableTop + 6, { width: 110, align: 'center' });
+  doc.text('HIGH', 180, tableTop + 6, { width: 110, align: 'center' });
+  doc.text('MEDIUM', 300, tableTop + 6, { width: 110, align: 'center' });
+  doc.text('TOTAL', 420, tableTop + 6, { width: 110, align: 'center' });
 
   // Table Data
   doc.rect(50, tableTop + 20, 490, 22).strokeColor(colors.border).stroke();
   doc.fontSize(10).font('Helvetica');
-  doc.text(String(c.Critical || 0), 60, tableTop + 27, { width: 90, align: 'center' });
-  doc.text(String(c.High || 0), 150, tableTop + 27, { width: 90, align: 'center' });
-  doc.text(String(c.Medium || 0), 240, tableTop + 27, { width: 90, align: 'center' });
-  doc.text(String(c.Low || 0), 330, tableTop + 27, { width: 90, align: 'center' });
-  doc.text(String(c.Info || 0), 420, tableTop + 27, { width: 110, align: 'center' });
+  doc.text(String(c.Critical || 0), 60, tableTop + 27, { width: 110, align: 'center' });
+  doc.text(String(c.High || 0), 180, tableTop + 27, { width: 110, align: 'center' });
+  doc.text(String(c.Medium || 0), 300, tableTop + 27, { width: 110, align: 'center' });
+  doc.text(String((reportData.findings || []).length), 420, tableTop + 27, { width: 110, align: 'center' });
 
   doc.y = tableTop + 60;
 
@@ -535,13 +533,23 @@ function buildPdfReport(reportData, res) {
       const remedTextHeight = doc.heightOfString(f.remediation || 'Maintain standard hardened setups.', { width: 490, lineGap: 1.5 });
       const remedHeight = remedTitleHeight + remedTextHeight + 15;
 
-      const totalHeight = titleHeight + descHeight + gridHeight + logicHeight + aiHeight + fpHeight + evidenceBoxHeight + remedHeight + 40;
+      let correlationHeight = 0;
+      if (f.isCorrelated && f.codeLocation) {
+        correlationHeight = 35;
+      }
 
+      let taintHeight = 0;
+      if (f.taintFlow) {
+        taintHeight = 35;
+      }
+ 
+      const totalHeight = titleHeight + descHeight + gridHeight + correlationHeight + taintHeight + logicHeight + aiHeight + fpHeight + evidenceBoxHeight + remedHeight + 40;
+ 
       // Start new page if the entire block does not fit on the current page
       if (doc.y + totalHeight > 720 && doc.y > 60) {
         doc.addPage();
       }
-
+ 
       const fTop = doc.y;
       doc.rect(50, fTop, 490, 20).fill(colors.secondary);
       doc.fillColor(colors.white).fontSize(9).font('Helvetica-Bold')
@@ -549,7 +557,7 @@ function buildPdfReport(reportData, res) {
       
       const badgeColor = colors[f.severity] || colors.accent;
       doc.fillColor(badgeColor).text(`[${f.severity}]`, 450, fTop + 6, { align: 'right', width: 80 });
-
+ 
       doc.y = fTop + 25;
       
       doc.fontSize(8.5).font('Helvetica').fillColor(colors.text)
@@ -558,10 +566,10 @@ function buildPdfReport(reportData, res) {
       // Metadata Grid in finding
       doc.moveDown(0.4);
       const gridTop = doc.y;
-
+ 
       // Draw background box
       doc.rect(50, gridTop, 490, gridHeight).fill('#f8fafc');
-
+ 
       // Print columns line-by-line relatively
       doc.fillColor(colors.primary).fontSize(7.5).font('Helvetica-Bold');
       
@@ -571,16 +579,44 @@ function buildPdfReport(reportData, res) {
       doc.text(`CWE Code: ${f.cwe || 'N/A'}`, 60, y1 + 3, { width: 220 });
       const y2 = doc.y;
       doc.text(`ASVS Reference: ${f.asvs || 'N/A'}`, 60, y2 + 3, { width: 220 });
-
+ 
       // Right Column
       doc.text(`CVSS v3.1 Score: ${f.cvss || 'N/A'}`, 300, gridTop + 6, { width: 220 });
       const ry1 = doc.y;
       doc.text(`Detection Confidence: ${f.detectionConfidence || 100}%`, 300, ry1 + 3, { width: 220 });
       const ry2 = doc.y;
       doc.text(`Risk Confidence: ${f.riskConfidence || 50}%`, 300, ry2 + 3, { width: 220 });
-
+ 
       doc.y = gridTop + gridHeight + 8;
 
+      if (f.isCorrelated && f.codeLocation) {
+        const corrTop = doc.y;
+        doc.rect(50, corrTop, 490, 24).fill('#e6f7ff'); // light blue background
+        doc.lineWidth(1).strokeColor('#bae7ff').rect(50, corrTop, 490, 24).stroke();
+        
+        doc.fillColor('#0050b3').fontSize(7.5).font('Helvetica-Bold');
+        doc.text('WHITE BOX CORRELATION:', 60, corrTop + 8, { width: 120 });
+        
+        doc.fillColor(colors.text).font('Helvetica').fontSize(7);
+        const loc = f.codeLocation;
+        doc.text(`Exposed in Code: ${loc.file || 'N/A'} ➔ ${loc.handler || 'inline'}() (lines ${loc.lineStart || 'N/A'}-${loc.lineEnd || 'N/A'})`, 175, corrTop + 8, { width: 350 });
+        doc.y = corrTop + 32;
+      }
+
+      if (f.taintFlow) {
+        const taintTop = doc.y;
+        doc.rect(50, taintTop, 490, 26).fill('#f0fdfa'); // light teal background
+        doc.lineWidth(1).strokeColor('#ccfbf1').rect(50, taintTop, 490, 26).stroke();
+        
+        doc.fillColor('#0d9488').fontSize(7.5).font('Helvetica-Bold');
+        doc.text('DATA FLOW ANALYSIS:', 60, taintTop + 8, { width: 120 });
+        
+        doc.fillColor(colors.text).font('Helvetica').fontSize(6.5);
+        const flowStr = f.taintFlow.flow.join(' ➔ ');
+        doc.text(`Flow Path: ${flowStr}`, 175, taintTop + 8, { width: 350 });
+        doc.y = taintTop + 34;
+      }
+ 
       // Detection Logic
       doc.fontSize(8).font('Helvetica-Bold').fillColor(colors.primary).text('Detection Logic:');
       doc.fontSize(7.5).font('Helvetica').fillColor(colors.text).text(f.detectionLogic || 'Passively analyze response content or headers.', { lineGap: 1.5 });
