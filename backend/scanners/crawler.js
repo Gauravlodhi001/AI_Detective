@@ -20,7 +20,8 @@ class RecursiveCrawler {
     this.log = log || [];
     this.sessionBridge = sessionBridge || null;
     this.visited = new Set();
-    this.endpoints = []; // Array of { path, fullUrl, method }
+    this.endpoints = []; // Array of { path, fullUrl, method, source, crawlStatus }
+    this.endpointKeys = new Set(); // Registry for deduplication
     this.maxPages = 15; // Hard limit to prevent crawling forever
   }
 
@@ -77,6 +78,46 @@ class RecursiveCrawler {
     return found;
   }
 
+  registerEndpoint(urlStr, method, crawlStatus = 'pending', source = 'crawler') {
+    try {
+      const parsed = new URL(urlStr);
+      let path = parsed.pathname;
+      const hash = parsed.hash;
+      if (hash && (hash.startsWith('#/') || hash.startsWith('#!/'))) {
+        const cleanHash = hash.split('?')[0];
+        if (path.endsWith('/') && cleanHash.startsWith('/')) {
+          path = path + cleanHash.slice(1);
+        } else {
+          path = path + cleanHash;
+        }
+      }
+      
+      const key = `${method.toUpperCase()}:${path}`;
+      if (!this.endpointKeys.has(key)) {
+        this.endpointKeys.add(key);
+        this.endpoints.push({
+          path,
+          fullUrl: urlStr,
+          method: method.toUpperCase(),
+          source,
+          crawlStatus
+        });
+      } else {
+        const existing = this.endpoints.find(e => e.path === path && e.method === method.toUpperCase());
+        if (existing) {
+          if (crawlStatus !== 'pending') {
+            existing.crawlStatus = crawlStatus;
+          }
+          if (urlStr.includes('?') && !existing.fullUrl.includes('?')) {
+            existing.fullUrl = urlStr;
+          }
+        }
+      }
+    } catch (e) {
+      this.log.push(`[Crawler:Error] Failed to register endpoint for ${urlStr}: ${e.message}`);
+    }
+  }
+
   // Runs the crawler (try Playwright first, fall back to HTTP spider)
   async crawl(startUrl, requestFn, maxDepth = 2, useBrowser = false) {
     this.log.push(`[Crawler] Starting crawl for target: ${startUrl} (max depth: ${maxDepth})`);
@@ -131,6 +172,9 @@ class RecursiveCrawler {
 
       this.log.push(`[Crawler:Browser] Visiting: ${url} at depth ${depth}`);
       
+      // Eagerly register endpoint as pending
+      this.registerEndpoint(url, 'GET', 'pending', 'crawler');
+
       try {
         await page.goto(url, { waitUntil: 'networkidle', timeout: 10000 });
         
@@ -139,8 +183,25 @@ class RecursiveCrawler {
           await this.sessionBridge.syncFromBrowserStorage(page);
         }
 
-        const path = new URL(url).pathname;
-        this.endpoints.push({ path, fullUrl: url, method: 'GET' });
+        const finalUrl = page.url();
+        const wasRedirected = cleanUrlForCrawler(finalUrl) !== cleanUrl;
+        const status = wasRedirected ? 'redirect' : 'success';
+        this.registerEndpoint(url, 'GET', status, 'crawler');
+
+        if (wasRedirected) {
+          try {
+            const finalOrigin = new URL(finalUrl).origin;
+            if (finalOrigin === origin) {
+              this.registerEndpoint(finalUrl, 'GET', 'success', 'crawler');
+              const cleanRedirect = cleanUrlForCrawler(finalUrl);
+              if (!this.visited.has(cleanRedirect)) {
+                queue.push({ url: finalUrl, depth: depth + 1 });
+              }
+            } else {
+              this.registerEndpoint(finalUrl, 'GET', 'redirect', 'crawler');
+            }
+          } catch (e) {}
+        }
 
         // Extract client-side links
         const links = await page.evaluate(() => {
@@ -169,17 +230,14 @@ class RecursiveCrawler {
         for (const form of forms) {
           try {
             const formUrl = new URL(form.action, url).href;
-            const formPath = new URL(formUrl).pathname;
-            this.endpoints.push({
-              path: formPath,
-              fullUrl: formUrl,
-              method: form.method.toUpperCase()
-            });
+            this.registerEndpoint(formUrl, form.method || 'GET', 'success', 'crawler');
           } catch (e) {}
         }
 
       } catch (err) {
         this.log.push(`[Crawler:Browser] Failed to visit ${url}: ${err.message}`);
+        const status = err.message.toLowerCase().includes('timeout') ? 'timeout' : 'error';
+        this.registerEndpoint(url, 'GET', status, 'crawler');
       }
     }
 
@@ -211,34 +269,52 @@ class RecursiveCrawler {
 
       this.log.push(`[Crawler:HTTP] Fetching: ${url} at depth ${depth}`);
 
-      const res = await requestFn(url, {
-        method: 'GET',
-        headers
-      });
+      // Eagerly register endpoint as pending
+      this.registerEndpoint(url, 'GET', 'pending', 'crawler');
 
-      if (res.status >= 200 && res.status < 300) {
-        const path = new URL(url).pathname;
-        this.endpoints.push({ path, fullUrl: url, method: 'GET' });
+      try {
+        const res = await requestFn(url, {
+          method: 'GET',
+          headers
+        });
 
-        const extracted = this.extractLinksAndForms(res.body, url);
-        
-        for (const item of extracted) {
-          if (item.type === 'link') {
-            const cleanLink = item.url.split('?')[0].split('#')[0];
-            if (!this.visited.has(cleanLink)) {
-              queue.push({ url: item.url, depth: depth + 1 });
+        if (res.status >= 200 && res.status < 300) {
+          this.registerEndpoint(url, 'GET', 'success', 'crawler');
+
+          const extracted = this.extractLinksAndForms(res.body, url);
+          
+          for (const item of extracted) {
+            if (item.type === 'link') {
+              const cleanLink = item.url.split('?')[0].split('#')[0];
+              if (!this.visited.has(cleanLink)) {
+                queue.push({ url: item.url, depth: depth + 1 });
+              }
+            } else if (item.type === 'form') {
+              this.registerEndpoint(item.url, item.method, 'success', 'crawler');
             }
-          } else if (item.type === 'form') {
-            const formPath = new URL(item.url).pathname;
-            this.endpoints.push({
-              path: formPath,
-              fullUrl: item.url,
-              method: item.method
-            });
           }
+        } else if (res.status >= 300 && res.status < 400 && res.headers && res.headers.location) {
+          this.registerEndpoint(url, 'GET', 'redirect', 'crawler');
+          try {
+            const redirectUrl = new URL(res.headers.location, url).href;
+            const redirectOrigin = new URL(redirectUrl).origin;
+            if (redirectOrigin === origin) {
+              this.registerEndpoint(redirectUrl, 'GET', 'success', 'crawler');
+              const cleanRedirect = cleanUrlForCrawler(redirectUrl);
+              if (!this.visited.has(cleanRedirect)) {
+                queue.push({ url: redirectUrl, depth: depth + 1 });
+              }
+            } else {
+              this.registerEndpoint(redirectUrl, 'GET', 'redirect', 'crawler');
+            }
+          } catch (e) {}
+        } else {
+          const status = res.error === 'timeout' ? 'timeout' : 'error';
+          this.registerEndpoint(url, 'GET', status, 'crawler');
         }
-      } else {
-        this.log.push(`[Crawler:HTTP] Failed to fetch ${url}. Status code: ${res.status}`);
+      } catch (err) {
+        this.log.push(`[Crawler:HTTP] Error fetching ${url}: ${err.message}`);
+        this.registerEndpoint(url, 'GET', 'error', 'crawler');
       }
     }
 

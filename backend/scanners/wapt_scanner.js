@@ -15,6 +15,68 @@ const { IdorVerifier } = require('./idor_verifier');
 const { RbacAuditor } = require('./rbac_auditor');
 const { RecursiveCrawler } = require('./crawler');
 
+let chromium;
+try {
+  chromium = require('playwright').chromium;
+} catch (e) {
+  chromium = null;
+}
+
+// Generates a unique canary id per XSS test so DOM execution results can be traced to the exact param/payload
+function generateXssCanaryId() {
+  return `xssai${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// Builds a payload that, if it executes as real script in a real DOM, pushes into window.__xssDetective
+function buildXssCanaryPayload(canaryId) {
+  return `<script>window.__xssDetective=window.__xssDetective||[];window.__xssDetective.push("${canaryId}")</script>`;
+}
+
+// Loads a URL in a real headless browser and checks whether the injected canary actually executed
+async function verifyXssDomExecution(url, { authHeaders = {}, timeout = 8000, log = [] } = {}) {
+  if (!chromium) {
+    log.push('[XssDomVerifier] Playwright not available; skipping DOM execution verification.');
+    return { executed: false, firedCanaries: [], dialogFired: false, error: 'playwright not available' };
+  }
+
+  let browser;
+  try {
+    browser = await chromium.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const context = await browser.newContext({ ignoreHTTPSErrors: true });
+
+    if (authHeaders && Object.keys(authHeaders).length > 0) {
+      await context.setExtraHTTPHeaders(authHeaders);
+    }
+
+    const page = await context.newPage();
+
+    let dialogFired = false;
+    page.on('dialog', async (dialog) => {
+      dialogFired = true;
+      await dialog.dismiss().catch(() => {});
+    });
+
+    log.push(`[XssDomVerifier] Navigating to ${url} for DOM execution check...`);
+    await page.goto(url, { waitUntil: 'networkidle', timeout }).catch((e) => {
+      log.push(`[XssDomVerifier] Navigation warning: ${e.message}`);
+    });
+
+    const firedCanaries = await page.evaluate(() => {
+      return Array.isArray(window.__xssDetective) ? window.__xssDetective : [];
+    }).catch(() => []);
+
+    await browser.close();
+    return { executed: firedCanaries.length > 0 || dialogFired, firedCanaries, dialogFired };
+  } catch (e) {
+    log.push(`[XssDomVerifier] Error during DOM verification: ${e.message}`);
+    if (browser) await browser.close().catch(() => {});
+    return { executed: false, firedCanaries: [], dialogFired: false, error: e.message };
+  }
+}
+
 function request(urlStr, options = {}) {
   return new Promise(async (resolve) => {
     const sessionManager = options.headers ? options.headers.__sessionManager : null;
@@ -1098,59 +1160,258 @@ async function checkDirectoryEnumeration(baseUrl, log, authHeaders = {}) {
   return findings;
 }
 
-// 5. checkXss
-async function checkXss(baseUrl, log, authHeaders = {}) {
-  log.push('[WAPT] Running checkXss...');
-  const discoveredParams = authHeaders.__discoveredParams || [];
-  const params = [...new Set(['q', 'search', 'name', 'input', ...discoveredParams])];
-  const payload = '<script>alert("XSS-AI-Detective")</script>';
+// Stored/Second-Order XSS Revisit Pass
+// Re-fetches all known GET-able pages/endpoints after the main scan and checks whether
+// any previously injected stored-XSS canary now appears somewhere other than where it
+// was submitted, confirming a stored or second-order vulnerability across pages.
+async function runStoredXssRevisitPass(targetSchemas, scanContext, log) {
   const findings = [];
+  const tracker = scanContext.storedXssTracker || [];
 
-  const promises = params.map(param => {
-    let testUrl = '';
-    try {
-      const parsed = new URL(baseUrl);
-      parsed.searchParams.set(param, payload);
-      testUrl = parsed.toString();
-    } catch (e) {
-      testUrl = `${baseUrl}?${param}=${encodeURIComponent(payload)}`;
-    }
-    return request(testUrl, { headers: authHeaders }).then(res => ({ param, testUrl, res }));
+  if (tracker.length === 0) {
+    log.push('[WAPT] No stored-XSS canaries were injected; skipping revisit pass.');
+    return findings;
+  }
+
+  log.push(`[WAPT] Running Stored/Second-Order XSS revisit pass for ${tracker.length} injected canary payload(s) across ${targetSchemas.length} page(s)...`);
+
+  const authHeaders = scanContext.authHeaders || {};
+  const confirmedCanaryIds = new Set();
+
+  // Only revisit GET-able surfaces, since stored payloads render on display/listing pages
+  const revisitTargets = targetSchemas.filter(item => {
+    const m = (item.schema && item.schema.method || 'GET').toUpperCase();
+    return m === 'GET';
   });
 
-  const results = await Promise.all(promises);
-
-  results.forEach(({ param, testUrl, res }) => {
-    const contentType = res.headers['content-type'] || '';
-    const isJson = contentType.includes('application/json');
-
-    if (isJson) {
-      return;
+  for (const item of revisitTargets) {
+    let res;
+    try {
+      res = await request(item.schema.url, { method: 'GET', headers: authHeaders });
+    } catch (e) {
+      log.push(`[WAPT] Stored-XSS revisit failed for ${item.path}: ${e.message}`);
+      continue;
     }
+    if (!res || !res.body) continue;
 
-    if (res.body.includes(payload)) {
+    for (const entry of tracker) {
+      if (confirmedCanaryIds.has(entry.canaryId)) continue;
+      if (!res.body.includes(entry.payload)) continue;
+
+      // Skip same-endpoint reflection; that's ordinary reflected XSS, already covered elsewhere
+      if (item.schema.url === entry.sourceUrl) continue;
+
+      confirmedCanaryIds.add(entry.canaryId);
+      log.push(`[WAPT] Stored XSS confirmed: canary from ${entry.sourceMethod} ${entry.sourceUrl} (param: ${entry.sourceParam}) rendered on ${item.path}.`);
+
       findings.push(createFinding({
-        title: `Reflected XSS Vulnerability in Parameter: ${param}`,
-        observation: `The application echoes back user input unescaped in parameter ${param}.`,
-        evidence: `Parameter: ${param} | URL: ${testUrl} | Reflected Payload in response`,
-        detectionLogic: 'Inspect response body for exact, unescaped script tags reflection',
-        aiAnalysis: 'The scripting tag payload was echoed back character-for-character, which would trigger immediate script execution in the client browser.',
-        falsePositiveAssessment: 'Verified that the characters < and > were not HTML-encoded and the Content-Type was parsed as HTML by the client browser. This is an active vulnerability.',
-        detectionConfidence: 100,
-        riskConfidence: 95,
-        businessImpact: 'Hijacking of user sessions, modification of page content, and execution of arbitrary actions on behalf of authenticated users.',
-        remediation: `Implement context-aware HTML entity encoding on all reflected user inputs, or use modern template engines that escape variables by default.`,
+        title: `Stored / Second-Order XSS via Parameter: ${entry.sourceParam}`,
+        observation: `A payload submitted via parameter "${entry.sourceParam}" on ${entry.sourceMethod} ${entry.sourceUrl} was later observed unescaped on a different page (${item.schema.url}), confirming the payload is persisted server-side and rendered without sanitization on subsequent views.`,
+        evidence: `Source: ${entry.sourceMethod} ${entry.sourceUrl} (param: ${entry.sourceParam}) | Sink: GET ${item.schema.url} | Canary: ${entry.canaryId}`,
+        detectionLogic: 'Inject a uniquely-tagged inert canary value via a body-bearing submission, then re-crawl all other discovered GET-able pages and check for verbatim, unescaped reappearance of that canary on a page other than the one it was submitted to.',
+        aiAnalysis: 'The canary value persisted beyond the original request/response cycle and was rendered unescaped on an unrelated page, indicating the application stores untrusted input and replays it into HTML without contextual encoding. If a script-bearing payload were used instead of the inert canary, this would execute in the browser of any user who views the sink page.',
+        falsePositiveAssessment: 'The canary string is a unique, randomly-generated token unlikely to appear by coincidence; its presence on a separate page from where it was submitted directly demonstrates storage and replay rather than session-local echo.',
+        detectionConfidence: 95,
+        riskConfidence: 90,
+        businessImpact: 'Enables persistent script execution against any user (including administrators) who later views the affected page, leading to session hijacking, defacement, or privilege escalation at scale.',
+        remediation: 'Apply contextual output encoding wherever stored user input is rendered, and additionally sanitize or validate input at the point of storage. Treat all stored fields as untrusted on every render path, not just the original submission endpoint.',
         finalClassification: 'Confirmed Vulnerability',
         finalSeverity: 'Critical',
-        rawRequest: res.rawRequest,
-        rawResponse: res.rawResponse,
+        rawRequest: `${entry.sourceMethod} ${entry.sourceUrl}\r\n\r\n(param ${entry.sourceParam}=${entry.payload})`,
+        rawResponse: res.rawResponse || `GET ${item.schema.url} -> canary observed in body`,
         owasp: 'A03:2021-Injection',
         cwe: 'CWE-79',
         cvss: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:H/A:N (8.7)',
         asvs: 'ASVS V4.0.3-5.3.1'
       }));
     }
+  }
+
+  if (findings.length === 0) {
+    log.push('[WAPT] Stored/Second-Order XSS revisit pass complete. No persisted canary reflections found on alternate pages.');
+  }
+
+  return findings;
+}
+
+// 5. checkXss
+async function checkXss(target, log, context = {}) {
+  log.push('[WAPT] Running checkXss...');
+  const schema = normalizeTarget(target);
+  if (!schema) return [];
+  
+  const ctx = extractContext(context);
+  const authHeaders = ctx.authHeaders;
+  const discoveredParams = Array.from(ctx.discoveredParams);
+
+  const schemaParams = schema.parameters || [];
+  let paramsToTest = [];
+  if (schemaParams.length > 0) {
+    paramsToTest = schemaParams;
+    if (schema.hasRealSchema) {
+      log.push(`[Schema] ${schema.method} ${schema.url}`);
+      log.push(`[Params] ${schemaParams.map(p => p.name).join(', ')}`);
+      log.push(`[WAPT] Using schema-backed parameters for ${schema.url}. Fallbacks skipped.`);
+    }
+  } else {
+    const defaultKeys = ['q', 'search', 'name', 'input'];
+    const uniqueKeys = [...new Set([...defaultKeys, ...discoveredParams])];
+    paramsToTest = uniqueKeys.map(k => ({
+      name: k,
+      location: 'query',
+      type: 'string'
+    }));
+  }
+
+  // Stored/second-order XSS: for body-bearing submissions, inject a uniquely-tagged
+  // canary alongside the normal reflected payload and record it for a later revisit pass.
+  // This canary is inert (no <script>) so it can persist through storage and be grepped
+  // for verbatim on whatever page later renders it.
+  const method = (schema.method || 'GET').toUpperCase();
+  const isBodyBearing = ['POST', 'PUT', 'PATCH'].includes(method);
+  if (isBodyBearing && context && context.storedXssTracker) {
+    for (const param of paramsToTest) {
+      if (param.location === 'query' || param.location === 'path') continue; // not a stored-candidate surface
+      const storedCanaryId = `storedxss_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+      const storedPayload = `AID-CANARY-${storedCanaryId}-AID`;
+      try {
+        const storedReqConfig = buildRequest(schema, param, storedPayload);
+        const storedHeaders = { ...authHeaders, ...storedReqConfig.headers };
+        await request(storedReqConfig.url, {
+          method: storedReqConfig.method,
+          headers: storedHeaders,
+          body: storedReqConfig.body
+        });
+        context.storedXssTracker.push({
+          canaryId: storedCanaryId,
+          payload: storedPayload,
+          sourceParam: param.name,
+          sourceUrl: storedReqConfig.url,
+          sourceMethod: storedReqConfig.method
+        });
+        log.push(`[WAPT] Injected stored-XSS canary into ${param.name} at ${storedReqConfig.method} ${storedReqConfig.url} for later revisit verification.`);
+      } catch (e) {
+        log.push(`[WAPT] Failed to inject stored-XSS canary for ${param.name}: ${e.message}`);
+      }
+    }
+  }
+
+  const payload = '<script>alert("XSS-AI-Detective")</script>';
+  const findings = [];
+
+  const promises = paramsToTest.map(param => {
+    const reqConfig = buildRequest(schema, param, payload);
+    
+    let pathOnly = schema.url;
+    try {
+      pathOnly = new URL(schema.url).pathname;
+    } catch (e) {}
+    log.push(`[Testing] XSS -> ${reqConfig.method} ${pathOnly} (${param.name})`);
+
+    const requestHeaders = {
+      ...authHeaders,
+      ...reqConfig.headers
+    };
+    return request(reqConfig.url, {
+      method: reqConfig.method,
+      headers: requestHeaders,
+      body: reqConfig.body
+    }).then(res => ({ param: param.name, testUrl: reqConfig.url, res }));
   });
+
+  const results = await Promise.all(promises);
+
+  for (const { param, testUrl, res } of results) {
+    const contentType = res.headers['content-type'] || '';
+    const isJson = contentType.includes('application/json');
+
+    if (res.body.includes(payload)) {
+      if (isJson) {
+        const pLower = param.toLowerCase();
+        const isHighRisk = ['message', 'comment', 'description', 'bio'].some(field => pLower.includes(field));
+        const finalSeverity = isHighRisk ? 'High' : 'Medium';
+        const riskConfidence = isHighRisk ? 80 : 60;
+        const cvss = isHighRisk 
+          ? 'CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N (6.1)' 
+          : 'CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N (4.3)';
+
+        findings.push(createFinding({
+          title: `Reflected Input in JSON API Response: ${param}`,
+          observation: `The application echoes user input unescaped within JSON response property "${param}". If rendered insecurely by client-side templates, this can lead to DOM XSS.`,
+          evidence: `Parameter: ${param} | URL: ${testUrl} | Reflected Payload in response JSON`,
+          detectionLogic: 'Inspect JSON response body for raw unescaped script tag reflection',
+          aiAnalysis: 'The scripting payload reflected character-for-character inside the JSON payload, indicating the server does not perform contextual output encoding on REST responses. This poses a DOM XSS threat if dynamic templates consume this field.',
+          falsePositiveAssessment: 'Confirmed that raw HTML special characters are preserved unescaped in the JSON payload, making it dangerous if bound to raw HTML rendering components.',
+          detectionConfidence: 100,
+          riskConfidence,
+          businessImpact: 'Execution of arbitrary scripts in the victim browser if rendered via insecure client-side DOM templates (e.g. innerHTML or v-html).',
+          remediation: 'Implement contextual output encoding on the client side, and validate or sanitize inputs server-side.',
+          finalClassification: 'Confirmed Vulnerability',
+          finalSeverity,
+          rawRequest: res.rawRequest,
+          rawResponse: res.rawResponse,
+          owasp: 'A03:2021-Injection',
+          cwe: 'CWE-79',
+          cvss,
+          asvs: 'ASVS V4.0.3-5.3.1'
+        }));
+      } else {
+        const canaryId = generateXssCanaryId();
+        const canaryPayload = buildXssCanaryPayload(canaryId);
+        const canaryReqConfig = buildRequest(schema, { name: param, location: 'query', type: 'string' }, canaryPayload);
+
+        const domResult = await verifyXssDomExecution(canaryReqConfig.url, {
+          authHeaders,
+          method: canaryReqConfig.method,
+          log
+        });
+
+        if (domResult.executed) {
+          findings.push(createFinding({
+            title: `Reflected XSS Vulnerability in Parameter: ${param}`,
+            observation: `The application echoes back user input unescaped in parameter ${param}, and the injected script was confirmed to execute inside a real browser DOM.`,
+            evidence: `Parameter: ${param} | URL: ${testUrl} | Canary fired: ${domResult.firedCanaries.join(', ') || canaryId}`,
+            detectionLogic: 'Inspect response body for unescaped script tag reflection, then load the page in a headless browser and verify the injected canary script actually executes (window callback or native dialog)',
+            aiAnalysis: 'The scripting tag payload was echoed back character-for-character AND confirmed to execute in a real browser context, eliminating false positives caused by framework auto-escaping or response Content-Type mismatches.',
+            falsePositiveAssessment: 'DOM execution verified directly: a unique canary value was observed inside window.__xssDetective after page load, confirming the script ran rather than merely appearing as text in the response body.',
+            detectionConfidence: 100,
+            riskConfidence: 98,
+            businessImpact: 'Hijacking of user sessions, modification of page content, and execution of arbitrary actions on behalf of authenticated users.',
+            remediation: `Implement context-aware HTML entity encoding on all reflected user inputs, or use modern template engines that escape variables by default.`,
+            finalClassification: 'Confirmed Vulnerability',
+            finalSeverity: 'Critical',
+            rawRequest: res.rawRequest,
+            rawResponse: res.rawResponse,
+            owasp: 'A03:2021-Injection',
+            cwe: 'CWE-79',
+            cvss: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:H/A:N (8.7)',
+            asvs: 'ASVS V4.0.3-5.3.1'
+          }));
+        } else {
+          findings.push(createFinding({
+            title: `Reflected Input Detected (Unconfirmed Execution): ${param}`,
+            observation: `The application echoes back user input unescaped in parameter ${param}, but the payload did not execute in an active browser DOM check. This may indicate CSP restrictions, downstream sanitization not visible in the raw HTTP layer, or a non-executable reflection context.`,
+            evidence: `Parameter: ${param} | URL: ${testUrl} | Raw reflection present, DOM execution NOT confirmed${domResult.error ? ` (verifier error: ${domResult.error})` : ''}`,
+            detectionLogic: 'Inspect response body for script tag reflection, then attempt DOM execution verification via headless browser',
+            aiAnalysis: 'The payload was present in the HTTP response as text, but loading the live page in a real browser did not trigger script execution. This is reported at reduced severity since exploitability could not be actively confirmed.',
+            falsePositiveAssessment: 'Raw reflection detected, but DOM execution check did not observe the canary firing. Possible causes: CSP enforcement, contextual escaping not visible via raw string match, or non-HTML rendering path.',
+            detectionConfidence: 70,
+            riskConfidence: 40,
+            businessImpact: 'Reduced risk unless an alternate rendering path or future code change exposes this reflection to direct DOM execution.',
+            remediation: `Implement context-aware HTML entity encoding on all reflected user inputs as a defense-in-depth measure, even though active execution was not confirmed.`,
+            finalClassification: 'Potential Vulnerability',
+            finalSeverity: 'Medium',
+            rawRequest: res.rawRequest,
+            rawResponse: res.rawResponse,
+            owasp: 'A03:2021-Injection',
+            cwe: 'CWE-79',
+            cvss: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N (4.3)',
+            asvs: 'ASVS V4.0.3-5.3.1'
+          }));
+        }
+      }
+    }
+  }
 
   if (findings.length === 0) {
     findings.push(createFinding({
@@ -1166,7 +1427,7 @@ async function checkXss(baseUrl, log, authHeaders = {}) {
       remediation: 'Ensure strict contextual output escaping is maintained.',
       finalClassification: 'Informational Observation',
       finalSeverity: 'Info',
-      rawRequest: `GET ${baseUrl}?q=${encodeURIComponent(payload)} HTTP/1.1\r\n\r\n`,
+      rawRequest: `GET ${schema.url}?q=${encodeURIComponent(payload)} HTTP/1.1\r\n\r\n`,
       rawResponse: 'HTTP/1.1 200 OK\r\n\r\n',
       owasp: 'A03:2021-Injection',
       cwe: 'CWE-79',
@@ -1175,16 +1436,38 @@ async function checkXss(baseUrl, log, authHeaders = {}) {
     }));
   }
 
-  findings.testedParams = params;
+  findings.testedParams = paramsToTest.map(p => p.name);
   return findings;
 }
 
 // 6. checkSqlInjection
-async function checkSqlInjection(baseUrl, log, authHeaders = {}) {
+async function checkSqlInjection(target, log, context = {}) {
   log.push('[WAPT] Running checkSqlInjection...');
-  const discoveredParams = authHeaders.__discoveredParams || [];
-  const params = [...new Set(['id', 'user', 'username', 'query', 'q', 'search', 'product', ...discoveredParams])];
-  const probes = ["'", "1' OR '1'='1", "1 AND 1=1--", "' OR 1=1--"];
+  const schema = normalizeTarget(target);
+  if (!schema) return [];
+
+  const ctx = extractContext(context);
+  const authHeaders = ctx.authHeaders;
+  const discoveredParams = Array.from(ctx.discoveredParams);
+
+  const schemaParams = schema.parameters || [];
+  let paramsToTest = [];
+  if (schemaParams.length > 0) {
+    paramsToTest = schemaParams;
+    if (schema.hasRealSchema) {
+      log.push(`[Schema] ${schema.method} ${schema.url}`);
+      log.push(`[Params] ${schemaParams.map(p => p.name).join(', ')}`);
+      log.push(`[WAPT] Using schema-backed parameters for ${schema.url}. Fallbacks skipped.`);
+    }
+  } else {
+    const defaultKeys = ['id', 'user', 'username', 'query', 'q', 'search', 'product'];
+    const uniqueKeys = [...new Set([...defaultKeys, ...discoveredParams])];
+    paramsToTest = uniqueKeys.map(k => ({
+      name: k,
+      location: 'query',
+      type: 'string'
+    }));
+  }
 
   const sqlErrorKeywords = [
     'SQL syntax', 'mysql_fetch', 'ORA-0', 'Microsoft OLE DB', 'ODBC Driver', 'SQLite3::',
@@ -1193,46 +1476,110 @@ async function checkSqlInjection(baseUrl, log, authHeaders = {}) {
   ];
 
   const findings = [];
+  const flaggedParams = new Set();
 
-  const tests = [];
-  for (const param of params) {
-    for (const probe of probes) {
-      let testUrl = '';
-      try {
-        const parsed = new URL(baseUrl);
-        parsed.searchParams.set(param, probe);
-        testUrl = parsed.toString();
-      } catch (e) {
-        testUrl = `${baseUrl}?${param}=${encodeURIComponent(probe)}`;
-      }
-      tests.push({ param, probe, testUrl });
-    }
+  function isDatabaseBacked(paramName) {
+    const name = paramName.toLowerCase();
+    return ['id', 'search', 'q', 'email', 'username', 'query', 'product', 'user'].some(k => name.includes(k));
   }
 
-  const promises = tests.map(t => request(t.testUrl, { headers: authHeaders }).then(res => ({ ...t, res })));
-  const results = await Promise.all(promises);
+  for (const param of paramsToTest) {
+    if (flaggedParams.has(param.name)) continue;
 
-  const flaggedParams = new Set();
-  results.forEach(({ param, probe, testUrl, res }) => {
-    if (flaggedParams.has(param)) return;
-    
-    // Context-Aware Rule: Check if it is a WAF block page (e.g. status 403 / 406 / WAF blocks)
-    const isWafBlock = res.status === 403 || res.status === 406 || res.status === 429 || 
-                       ['cloudflare', 'waf', 'ray id', 'security block', 'sucuri', 'blocked'].some(term => res.body.toLowerCase().includes(term));
-                       
-    if (isWafBlock) {
-      log.push(`[WAPT] Request blocked by WAF for parameter ${param}. Security controls are active.`);
-      return; // Skip reporting this as a SQLi vulnerability since it was successfully blocked!
+    let pathOnly = schema.url;
+    try {
+      pathOnly = new URL(schema.url).pathname;
+    } catch (e) {}
+
+    log.push(`[Testing] SQLi -> ${schema.method} ${pathOnly} (${param.name})`);
+
+    // 1. Measure Baseline Response
+    const fallbackVal = getSmartFallback(param.name);
+    const reqBase = buildRequest(schema, param, fallbackVal);
+    const startBase = Date.now();
+    let resBase;
+    try {
+      resBase = await request(reqBase.url, {
+        method: reqBase.method,
+        headers: { ...authHeaders, ...reqBase.headers },
+        body: reqBase.body
+      });
+    } catch (err) {
+      log.push(`[WAPT:SQLi] Error sending baseline request: ${err.message}`);
+      continue;
+    }
+    const durBase = Date.now() - startBase;
+    const lenBase = resBase.body ? resBase.body.length : 0;
+    const statusBase = resBase.status;
+
+    // Helper to check for WAF blocks
+    const isWafBlock = (res) => {
+      return res.status === 403 || res.status === 406 || res.status === 429 || 
+             ['cloudflare', 'waf', 'ray id', 'security block', 'sucuri', 'blocked'].some(term => res.body.toLowerCase().includes(term));
+    };
+
+    if (isWafBlock(resBase)) {
+      log.push(`[WAPT] Request blocked by WAF for baseline parameter ${param.name}.`);
+      continue;
     }
 
-    const matchedKeyword = sqlErrorKeywords.find(keyword => res.body.toLowerCase().includes(keyword.toLowerCase()));
+    const testProbe = async (probeVal) => {
+      const req = buildRequest(schema, param, probeVal);
+      const start = Date.now();
+      let res;
+      try {
+        res = await request(req.url, {
+          method: req.method,
+          headers: { ...authHeaders, ...req.headers },
+          body: req.body
+        });
+      } catch (e) {
+        res = { status: 500, body: '', headers: {} };
+      }
+      const duration = Date.now() - start;
+      return { res, duration, len: res.body ? res.body.length : 0 };
+    };
 
-    if (matchedKeyword) {
-      flaggedParams.add(param);
+    // 2. Measure Truth and False Responses
+    const { res: resTruth, duration: durTruth, len: lenTruth } = await testProbe(`' OR '1'='1`);
+    const { res: resFalse, duration: durFalse, len: lenFalse } = await testProbe(`' OR '1'='2`);
+
+    // A. Check for Error-Based SQLi
+    let errorKeywordMatched = null;
+    let errorEvidence = '';
+    let errorProbeUsed = '';
+    
+    const checkErrorSql = (body) => {
+      return sqlErrorKeywords.find(keyword => body.toLowerCase().includes(keyword.toLowerCase()));
+    };
+
+    const errInTruth = checkErrorSql(resTruth.body);
+    const errInFalse = checkErrorSql(resFalse.body);
+    
+    if (errInTruth) {
+      errorKeywordMatched = errInTruth;
+      errorEvidence = `Matched DB Error string: "${errInTruth}" in Truth Response`;
+      errorProbeUsed = `' OR '1'='1`;
+    } else if (errInFalse) {
+      errorKeywordMatched = errInFalse;
+      errorEvidence = `Matched DB Error string: "${errInFalse}" in False Response`;
+      errorProbeUsed = `' OR '1'='2`;
+    } else {
+      const { res: resErr } = await testProbe(`'`);
+      const errInErr = checkErrorSql(resErr.body);
+      if (errInErr) {
+        errorKeywordMatched = errInErr;
+        errorEvidence = `Matched DB Error string: "${errInErr}" in Syntax Error Response`;
+        errorProbeUsed = `'`;
+      }
+    }
+
+    if (errorKeywordMatched) {
+      flaggedParams.add(param.name);
       findings.push(createFinding({
-        title: `Potential SQL Injection in Parameter: ${param}`,
+        title: `Potential SQL Injection in Parameter: ${param.name}`,
         observation: `Sending SQL injection probes resulted in database syntax error outputs in the response body.`,
-        evidence: `Parameter: ${param} | Probe: ${probe} | Matched DB Error string: "${matchedKeyword}"`,
+        evidence: `Parameter: ${param.name} | Probe: ${errorProbeUsed} | ${errorEvidence}`,
         detectionLogic: 'Monitor response body for database syntax error keywords',
         aiAnalysis: 'The database returned a syntax error directly in the response, showing that input is directly affecting the database compiler. This indicates queries are being dynamically constructed with unvalidated input.',
         falsePositiveAssessment: 'The error matches standard database exception signatures and was not blocked by WAF or CDNs. Exploitability verified.',
@@ -1242,22 +1589,142 @@ async function checkSqlInjection(baseUrl, log, authHeaders = {}) {
         remediation: 'Use parameterized queries (prepared statements) for all database operations and avoid raw string concatenation.',
         finalClassification: 'Confirmed Vulnerability',
         finalSeverity: 'Critical',
-        rawRequest: res.rawRequest,
-        rawResponse: res.rawResponse,
+        rawRequest: resTruth.rawRequest || resBase.rawRequest,
+        rawResponse: resTruth.rawResponse || resBase.rawResponse,
         owasp: 'A03:2021-Injection',
         cwe: 'CWE-89',
         cvss: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H (9.8)',
         asvs: 'ASVS V4.0.3-5.3.4'
       }));
+      continue;
     }
-  });
+
+    // B. Check for Authentication Bypass
+    const isBaseFailed = statusBase === 401 || statusBase === 400 || statusBase === 403 || statusBase === 404;
+    if (isBaseFailed) {
+      const authProbeVal = param.name.toLowerCase().includes('email') || param.name.toLowerCase().includes('user')
+        ? `admin@juice-sh.op'--`
+        : `' OR 1=1--`;
+
+      const { res: resAuth } = await testProbe(authProbeVal);
+      const isAuthSuccess = resAuth.status === 200 || resAuth.status === 201;
+
+      if (isAuthSuccess) {
+        const authKeys = ['token', 'jwt', 'accessToken', 'session', 'authentication', 'user', 'email', 'id'];
+        const matchedKey = authKeys.find(key => {
+          const inInj = resAuth.body.toLowerCase().includes(key.toLowerCase());
+          const inBase = resBase.body.toLowerCase().includes(key.toLowerCase());
+          return inInj && !inBase;
+        });
+
+        if (matchedKey) {
+          flaggedParams.add(param.name);
+          findings.push(createFinding({
+            title: `SQL Injection (Authentication Bypass) in Parameter: ${param.name}`,
+            observation: `The application is vulnerable to SQL Injection Authentication Bypass. Injecting SQL control sequences allows bypassing login credentials checking entirely.`,
+            evidence: `Parameter: ${param.name} | Probe: ${authProbeVal} | Status Base: ${statusBase} | Status Injected: ${resAuth.status} | Session Key Matched: "${matchedKey}"`,
+            detectionLogic: 'Verify if SQLi probe changes auth failure (4xx) to success (200) with session indicators.',
+            aiAnalysis: 'The server upgraded the response status code from unauthorized (4xx) to success (200/201) when a SQL comment bypass sequence was injected, returning session metadata. This proves authentication bypass.',
+            falsePositiveAssessment: 'Verified that a session token or user profile property was returned in the SQLi response but was absent in the baseline response.',
+            detectionConfidence: 100,
+            riskConfidence: 95,
+            businessImpact: 'Allows administrative access to accounts without valid passwords, fully compromising the authentication layer.',
+            remediation: 'Utilize prepared statements/parameterized queries for all query checks in auth routines. Avoid dynamic string building.',
+            finalClassification: 'Confirmed Vulnerability',
+            finalSeverity: 'Critical',
+            rawRequest: resAuth.rawRequest,
+            rawResponse: resAuth.rawResponse,
+            owasp: 'A03:2021-Injection',
+            cwe: 'CWE-89',
+            cvss: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H (9.8)',
+            asvs: 'ASVS V4.0.3-5.3.4'
+          }));
+          continue;
+        }
+      }
+    }
+
+    // C. Check for Boolean-Based SQLi / Response-Shape Comparison
+    const deltaTruth = Math.abs(lenTruth - lenBase) / Math.max(lenTruth, lenBase, 1);
+    const deltaFalse = Math.abs(lenTruth - lenFalse) / Math.max(lenTruth, lenFalse, 1);
+
+    const isFalseEmpty = resFalse.body.trim() === '[]' || resFalse.body.trim() === '{"data":[]}' || resFalse.body.trim() === '';
+    const isTruthPopulated = !isFalseEmpty && resTruth.body.trim() !== '[]' && resTruth.body.trim() !== '{"data":[]}';
+
+    const hasBooleanAnomalies = (deltaTruth < 0.10 && deltaFalse > 0.15) || (isTruthPopulated && isFalseEmpty && resTruth.status === 200 && resFalse.status !== 500);
+
+    if (hasBooleanAnomalies) {
+      // D. Conditional Timing Check (Stage 2)
+      let timingVerified = false;
+      let durTiming = 0;
+      let resTime = null;
+
+      if (isDatabaseBacked(param.name) || hasBooleanAnomalies) {
+        log.push(`[WAPT:SQLi] Suspected database parameter anomaly for ${param.name}. Running conditional timing confirmation...`);
+        const timingProbe = `' AND (SELECT 1 FROM (SELECT(LIKE('ABCDEFG',UPPER(HEX(RANDOMBLOB(10000000)))))))--`;
+        const timeResult = await testProbe(timingProbe);
+        durTiming = timeResult.duration;
+        resTime = timeResult.res;
+        
+        if (durTiming > durBase + 2000) {
+          timingVerified = true;
+        }
+      }
+
+      flaggedParams.add(param.name);
+      
+      if (timingVerified) {
+        findings.push(createFinding({
+          title: `SQL Injection (Timing-Based & Boolean-Based) in Parameter: ${param.name}`,
+          observation: `The application's behavior changed depending on boolean conditions, and timing delays confirmed execution of resource-intensive SQLite queries.`,
+          evidence: `Parameter: ${param.name} | Boolean delta: ${deltaFalse.toFixed(2)} | Baseline duration: ${durBase}ms | Timing duration: ${durTiming}ms`,
+          detectionLogic: 'Compare truth vs false response sizes and verify execution via timing delay.',
+          aiAnalysis: 'The server exhibited a significant response size differential under opposite boolean conditions and experienced a Timing delay matching CPU-intensive SQLite functions, confirming blind SQLi.',
+          falsePositiveAssessment: 'Response timing delay exceeds 2 seconds over baseline and size difference is verified. Low false positive rate.',
+          detectionConfidence: 100,
+          riskConfidence: 95,
+          businessImpact: 'Enables blind extraction of all database schemas, table names, and record cell content.',
+          remediation: 'Implement strict parameterized queries and prepared statements.',
+          finalClassification: 'Confirmed Vulnerability',
+          finalSeverity: 'Critical',
+          rawRequest: resTime.rawRequest,
+          rawResponse: resTime.rawResponse,
+          owasp: 'A03:2021-Injection',
+          cwe: 'CWE-89',
+          cvss: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H (9.8)',
+          asvs: 'ASVS V4.0.3-5.3.4'
+        }));
+      } else {
+        findings.push(createFinding({
+          title: `SQL Injection (Boolean-Based) in Parameter: ${param.name}`,
+          observation: `The application returns different response sizes/structures when fuzzed with opposite boolean SQL conditions.`,
+          evidence: `Parameter: ${param.name} | Truth length: ${lenTruth} | False length: ${lenFalse} | Delta: ${deltaFalse.toFixed(2)}`,
+          detectionLogic: 'Compare response shapes and sizes between truth (TRUE) and false (FALSE) logical payloads.',
+          aiAnalysis: 'Response sizes and structures differed significantly ($>15\%$) when opposite boolean conditions were injected, showing that inputs are influencing the queries logically.',
+          falsePositiveAssessment: 'Verified that the truth response resembles the baseline while the false response returns an empty set or error.',
+          detectionConfidence: 90,
+          riskConfidence: 90,
+          businessImpact: 'Enables attackers to extract database information character-by-character through boolean queries.',
+          remediation: 'Implement parameterized queries and prepared statements across all database interactions.',
+          finalClassification: 'Confirmed Vulnerability',
+          finalSeverity: 'Critical',
+          rawRequest: resTruth.rawRequest,
+          rawResponse: resTruth.rawResponse,
+          owasp: 'A03:2021-Injection',
+          cwe: 'CWE-89',
+          cvss: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H (9.8)',
+          asvs: 'ASVS V4.0.3-5.3.4'
+        }));
+      }
+    }
+  }
 
   if (findings.length === 0) {
     findings.push(createFinding({
       title: 'SQL Injection Checks Passed',
       observation: 'No database query errors or SQL syntax leaks were detected in response to dynamic probes.',
-      evidence: 'Probed parameters id, user, username, query, q, search, product with 4 SQL injection sequences.',
-      detectionLogic: 'No database errors or WAF blocks triggered',
+      evidence: 'Probed parameters with baseline, truth, false, and timing SQL injection sequences.',
+      detectionLogic: 'No database errors, timing anomalies, or WAF blocks triggered',
       aiAnalysis: 'The tested application did not leak any database exceptions or errors.',
       falsePositiveAssessment: 'Parameters successfully parsed without triggering database parser exceptions.',
       detectionConfidence: 100,
@@ -1266,7 +1733,7 @@ async function checkSqlInjection(baseUrl, log, authHeaders = {}) {
       remediation: 'Continue enforcing SQL parameterization across all query operations.',
       finalClassification: 'Informational Observation',
       finalSeverity: 'Info',
-      rawRequest: `GET ${baseUrl}?id=${encodeURIComponent(probes[0])} HTTP/1.1\r\n\r\n`,
+      rawRequest: `GET ${schema.url} HTTP/1.1\r\n\r\n`,
       rawResponse: 'HTTP/1.1 200 OK\r\n\r\n',
       owasp: 'A03:2021-Injection',
       cwe: 'CWE-89',
@@ -1275,58 +1742,108 @@ async function checkSqlInjection(baseUrl, log, authHeaders = {}) {
     }));
   }
 
-  findings.testedParams = params;
+  findings.testedParams = paramsToTest.map(p => p.name);
   return findings;
 }
 
 // 7. checkOpenRedirect
-async function checkOpenRedirect(baseUrl, log, authHeaders = {}) {
+async function checkOpenRedirect(target, log, context = {}) {
   log.push('[WAPT] Running checkOpenRedirect...');
-  const params = ['redirect', 'next', 'url', 'goto', 'return', 'returnUrl', 'callback', 'continue'];
-  const payload = 'https://evil.example.com';
-  const findings = [];
+  const schema = normalizeTarget(target);
+  if (!schema) return [];
 
-  const promises = params.map(param => {
-    let testUrl = '';
-    try {
-      const parsed = new URL(baseUrl);
-      parsed.searchParams.set(param, payload);
-      testUrl = parsed.toString();
-    } catch (e) {
-      testUrl = `${baseUrl}?${param}=${encodeURIComponent(payload)}`;
+  const ctx = extractContext(context);
+  const authHeaders = ctx.authHeaders;
+
+  const schemaParams = schema.parameters || [];
+  let paramsToTest = [];
+  if (schemaParams.length > 0) {
+    paramsToTest = schemaParams;
+    if (schema.hasRealSchema) {
+      log.push(`[Schema] ${schema.method} ${schema.url}`);
+      log.push(`[Params] ${schemaParams.map(p => p.name).join(', ')}`);
+      log.push(`[WAPT] Using schema-backed parameters for ${schema.url}. Fallbacks skipped.`);
     }
-    return request(testUrl, { headers: authHeaders }).then(res => ({ param, testUrl, res }));
-  });
+  } else {
+    const defaultKeys = ['redirect', 'next', 'url', 'goto', 'return', 'returnUrl', 'callback', 'continue'];
+    paramsToTest = defaultKeys.map(k => ({
+      name: k,
+      location: 'query',
+      type: 'string'
+    }));
+  }
+
+  let trustedHost = 'example.com';
+  try {
+    trustedHost = new URL(schema.url).hostname;
+  } catch (e) {}
+
+  const payloads = [
+    'https://evil.example.com',
+    '//evil.example.com',
+    '/\\evil.example.com',
+    `https://${trustedHost}@evil.example.com`,
+    `https://${trustedHost}.evil.example.com`,
+    `https://evil.example.com/${trustedHost}`,
+    'https:/\\evil.example.com',
+    'https://evil.example.com%2f%2e%2e',
+    '/%2f%2fevil.example.com',
+    `https://evil.example.com?@${trustedHost}`
+  ];
+  const findings = [];
+  const flaggedParams = new Set();
+
+  const promises = paramsToTest.flatMap(param => payloads.map(payload => {
+    const reqConfig = buildRequest(schema, param, payload);
+
+    let pathOnly = schema.url;
+    try {
+      pathOnly = new URL(schema.url).pathname;
+    } catch (e) {}
+    log.push(`[Testing] OpenRedirect -> ${reqConfig.method} ${pathOnly} (${param.name}) [${payload}]`);
+
+    const requestHeaders = {
+      ...authHeaders,
+      ...reqConfig.headers
+    };
+    return request(reqConfig.url, {
+      method: reqConfig.method,
+      headers: requestHeaders,
+      body: reqConfig.body
+    }).then(res => ({ param: param.name, payload, testUrl: reqConfig.url, res }));
+  }));
 
   const results = await Promise.all(promises);
 
-  results.forEach(({ param, testUrl, res }) => {
+  results.forEach(({ param, payload, testUrl, res }) => {
+    if (flaggedParams.has(param)) return;
     const location = res.headers['location'] || '';
     if (res.status >= 300 && res.status < 400 && location) {
       let isTargetHost = false;
       try {
-        const redirectUrl = new URL(location, baseUrl);
-        if (redirectUrl.hostname === 'evil.example.com') {
+        const redirectUrl = new URL(location, schema.url);
+        if (redirectUrl.hostname === 'evil.example.com' || redirectUrl.hostname.endsWith('.evil.example.com')) {
           isTargetHost = true;
         }
       } catch (e) {
-        if (location.startsWith('https://evil.example.com') || location.startsWith('//evil.example.com')) {
+        if (/evil\.example\.com/i.test(location)) {
           isTargetHost = true;
         }
       }
 
       if (isTargetHost) {
+        flaggedParams.add(param);
         findings.push(createFinding({
           title: `Open Redirect Vulnerability in Parameter: ${param}`,
-          observation: `The application redirects users to arbitrary external URLs supplied via the "${param}" parameter, facilitating phishing campaigns.`,
-          evidence: `Parameter: ${param} | Redirect Status: ${res.status} | Location: ${location}`,
-          detectionLogic: 'Verify that the hostname of the Location header matches the external domain payload',
-          aiAnalysis: 'The response returned a 3xx redirect directly targeting the untrusted external host hostname. This facilitates phishing campaigns.',
-          falsePositiveAssessment: 'Verified that the hostname of the Location header matches the external domain payload. Exploitability verified.',
+          observation: `The application redirects users to arbitrary external URLs supplied via the "${param}" parameter using an allowlist-bypass payload (${payload}), facilitating phishing campaigns.`,
+          evidence: `Parameter: ${param} | Payload: ${payload} | Redirect Status: ${res.status} | Location: ${location}`,
+          detectionLogic: 'Verify that the hostname of the Location header resolves to the external domain payload, accounting for allowlist bypass techniques (protocol-relative URLs, backslash tricks, userinfo injection, subdomain spoofing, path traversal)',
+          aiAnalysis: `A bypass technique (${payload}) succeeded in redirecting to an untrusted external host, indicating the server's allowlist validation is incomplete or naively implemented.`,
+          falsePositiveAssessment: 'Verified that the hostname of the Location header matches the external domain payload despite allowlist filtering. Exploitability verified.',
           detectionConfidence: 100,
           riskConfidence: 90,
           businessImpact: 'Enables attackers to construct trusted-looking links that redirect users to malicious phishing pages, compromising credentials.',
-          remediation: 'Implement an allowlist of permitted redirect domains, or use relative URLs only.',
+          remediation: 'Implement a strict allowlist of permitted redirect domains using exact hostname matching (not substring/prefix checks), reject userinfo components in redirect URLs, normalize backslashes to forward slashes before validation, or use relative URLs only.',
           finalClassification: 'Confirmed Vulnerability',
           finalSeverity: 'High',
           rawRequest: res.rawRequest,
@@ -1343,10 +1860,10 @@ async function checkOpenRedirect(baseUrl, log, authHeaders = {}) {
   if (findings.length === 0) {
     findings.push(createFinding({
       title: 'Open Redirect Checks Passed',
-      observation: 'No arbitrary redirection to external evil domains was detected during parameters probing.',
-      evidence: 'Tested 8 typical redirect parameters with external domain payload.',
-      detectionLogic: 'Confirm Location header is either absent or stays within the origin domain',
-      aiAnalysis: 'Redirect requests were either ignored or did not point to the external test domain.',
+      observation: 'No arbitrary redirection to external evil domains was detected during parameters probing, including allowlist-bypass variants.',
+      evidence: `Tested ${paramsToTest.length} redirect parameter(s) against ${payloads.length} allowlist-bypass payload variants (protocol-relative, backslash, userinfo, subdomain spoofing, path traversal, double-encoding).`,
+      detectionLogic: 'Confirm Location header is either absent or stays within the origin domain across all bypass payload variants',
+      aiAnalysis: 'Redirect requests were either ignored or did not point to the external test domain for any tested bypass technique.',
       falsePositiveAssessment: 'No parameter redirection bypasses matched the target host validation rules.',
       detectionConfidence: 100,
       riskConfidence: 10,
@@ -1354,7 +1871,7 @@ async function checkOpenRedirect(baseUrl, log, authHeaders = {}) {
       remediation: 'Maintain local redirect verification checks.',
       finalClassification: 'Informational Observation',
       finalSeverity: 'Info',
-      rawRequest: `GET ${baseUrl}?redirect=${encodeURIComponent(payload)} HTTP/1.1\r\n\r\n`,
+      rawRequest: `GET ${schema.url}?redirect=${encodeURIComponent(payloads[0])} HTTP/1.1\r\n\r\n`,
       rawResponse: 'HTTP/1.1 200 OK\r\n\r\n',
       owasp: 'A01:2021-Broken Access Control',
       cwe: 'CWE-601',
@@ -2249,9 +2766,304 @@ function correlateAttackPaths(findings, surface) {
   return paths;
 }
 
+function normalizeTarget(target) {
+  if (!target) return null;
+  if (typeof target === 'string') {
+    return {
+      url: target,
+      method: 'GET',
+      parameters: []
+    };
+  }
+  return target;
+}
+
+function buildRequest(schema, parameter, payload) {
+  const method = (schema.method || 'GET').toUpperCase();
+  let url = schema.url;
+  const headers = {};
+  let body = null;
+
+  const parameters = schema.parameters || [];
+
+  const cookies = [];
+  parameters.forEach(p => {
+    if (p.location === 'header') {
+      headers[p.name] = p.name === parameter?.name ? payload : (p.fallback !== undefined ? p.fallback : '');
+    } else if (p.location === 'cookie') {
+      const val = p.name === parameter?.name ? payload : (p.fallback !== undefined ? p.fallback : '');
+      cookies.push(`${p.name}=${val}`);
+    }
+  });
+  if (cookies.length > 0) {
+    headers['Cookie'] = cookies.join('; ');
+  }
+
+  if (parameter && parameter.location === 'path') {
+    const pathPlaceholder = new RegExp(`(:${parameter.name}|\\{${parameter.name}\\})`, 'g');
+    if (pathPlaceholder.test(url)) {
+      url = url.replace(pathPlaceholder, encodeURIComponent(payload));
+    } else {
+      url = url.endsWith('/') ? `${url}${encodeURIComponent(payload)}` : `${url}/${encodeURIComponent(payload)}`;
+    }
+  }
+  parameters.forEach(p => {
+    if (p.name !== parameter?.name && p.location === 'path' && p.fallback !== undefined) {
+      const pathPlaceholder = new RegExp(`(:${p.name}|\\{${p.name}\\})`, 'g');
+      if (pathPlaceholder.test(url)) {
+        url = url.replace(pathPlaceholder, encodeURIComponent(p.fallback));
+      }
+    }
+  });
+
+  if (parameter && parameter.location === 'query') {
+    try {
+      const parsed = new URL(url);
+      parsed.searchParams.set(parameter.name, payload);
+      url = parsed.toString();
+    } catch (e) {
+      const separator = url.includes('?') ? '&' : '?';
+      url = `${url}${separator}${parameter.name}=${encodeURIComponent(payload)}`;
+    }
+  }
+  parameters.forEach(p => {
+    if (p.name !== parameter?.name && p.location === 'query' && p.fallback !== undefined) {
+      try {
+        const parsed = new URL(url);
+        parsed.searchParams.set(p.name, p.fallback);
+        url = parsed.toString();
+      } catch (e) {
+        const separator = url.includes('?') ? '&' : '?';
+        url = `${url}${separator}${p.name}=${encodeURIComponent(p.fallback)}`;
+      }
+    }
+  });
+
+  const bodyParams = parameters.filter(p => p.location === 'body');
+  if (bodyParams.length > 0 || (parameter && parameter.location === 'body')) {
+    headers['Content-Type'] = 'application/json';
+    const bodyObj = {};
+    bodyParams.forEach(p => {
+      if (p.name === parameter?.name) {
+        bodyObj[p.name] = payload;
+      } else if (p.fallback !== undefined) {
+        bodyObj[p.name] = p.fallback;
+      } else {
+        bodyObj[p.name] = p.type === 'integer' || p.type === 'number' ? null : '';
+      }
+    });
+    if (parameter && parameter.location === 'body' && !bodyObj.hasOwnProperty(parameter.name)) {
+      bodyObj[parameter.name] = payload;
+    }
+    body = JSON.stringify(bodyObj);
+  }
+
+  const multipartParams = parameters.filter(p => p.location === 'multipart');
+  if (multipartParams.length > 0 || (parameter && parameter.location === 'multipart')) {
+    const boundary = '----BoundaryWaptScanner';
+    headers['Content-Type'] = `multipart/form-data; boundary=${boundary}`;
+    let bodyStr = '';
+    multipartParams.forEach(p => {
+      bodyStr += `--${boundary}\r\n`;
+      bodyStr += `Content-Disposition: form-data; name="${p.name}"\r\n\r\n`;
+      bodyStr += `${p.name === parameter?.name ? payload : (p.fallback !== undefined ? p.fallback : '')}\r\n`;
+    });
+    if (parameter && parameter.location === 'multipart' && !multipartParams.some(p => p.name === parameter.name)) {
+      bodyStr += `--${boundary}\r\n`;
+      bodyStr += `Content-Disposition: form-data; name="${parameter.name}"\r\n\r\n`;
+      bodyStr += `${payload}\r\n`;
+    }
+    bodyStr += `--${boundary}--\r\n`;
+    body = bodyStr;
+  }
+
+  return {
+    url,
+    method,
+    headers,
+    body
+  };
+}
+
+function extractContext(context) {
+  let authHeaders = {};
+  let discoveredParams = new Set();
+  
+  if (context && context.authHeaders) {
+    authHeaders = context.authHeaders || {};
+    if (context.discoveredParams) {
+      if (context.discoveredParams instanceof Set) {
+        discoveredParams = context.discoveredParams;
+      } else if (Array.isArray(context.discoveredParams)) {
+        discoveredParams = new Set(context.discoveredParams);
+      }
+    }
+  } else if (context) {
+    authHeaders = context;
+    if (authHeaders.__discoveredParams) {
+      const legacyParams = Array.isArray(authHeaders.__discoveredParams)
+        ? authHeaders.__discoveredParams
+        : Array.from(authHeaders.__discoveredParams);
+      discoveredParams = new Set(legacyParams);
+    }
+  }
+  
+  const cleanHeaders = { ...authHeaders };
+  delete cleanHeaders.__discoveredParams;
+  
+  return { authHeaders: cleanHeaders, discoveredParams };
+}
+
+function getSmartFallback(name) {
+  const n = name.toLowerCase();
+  if (n.includes('email')) return 'user@example.com';
+  if (n.includes('password')) return 'Password123!';
+  if (n.includes('answer')) return 'securityAnswer';
+  if (n.includes('question')) return '1';
+  if (n.includes('quantity')) return 1;
+  if (n.includes('id')) return 1;
+  return 'test';
+}
+
+const MIN_PARAM_CONFIDENCE = 0.80;
+
+function createTargetSchema(endpoint, paramMiner, resolvedUrl) {
+  const pathParams = [];
+  const pathParamRegex = /(?::([a-zA-Z0-9_]+)|\{([a-zA-Z0-9_]+)\})/g;
+  let match;
+  while ((match = pathParamRegex.exec(endpoint.path)) !== null) {
+    const pName = match[1] || match[2];
+    if (pName) {
+      pathParams.push(pName);
+    }
+  }
+
+  const parameters = [];
+
+  pathParams.forEach(name => {
+    parameters.push({
+      name,
+      location: 'path',
+      type: 'string',
+      fallback: getSmartFallback(name)
+    });
+  });
+
+  const isStateChanging = ['POST', 'PUT', 'PATCH'].includes(endpoint.method);
+
+  if (endpoint.params && Array.isArray(endpoint.params)) {
+    const confidence = endpoint.paramConfidence || 0;
+    if (confidence >= MIN_PARAM_CONFIDENCE) {
+      endpoint.params.forEach(p => {
+        if (pathParams.includes(p.name)) return;
+        let location = 'query';
+        if (isStateChanging) {
+          location = 'body';
+        }
+        parameters.push({
+          name: p.name,
+          location,
+          type: p.type || 'string',
+          fallback: getSmartFallback(p.name)
+        });
+      });
+
+      let fullUrl = endpoint.fullUrl;
+      if (!fullUrl) {
+        const base = resolvedUrl.endsWith('/') ? resolvedUrl.slice(0, -1) : resolvedUrl;
+        fullUrl = endpoint.path.startsWith('/') ? `${base}${endpoint.path}` : `${base}/${endpoint.path}`;
+      }
+
+      return {
+        url: fullUrl,
+        method: endpoint.method,
+        parameters,
+        paramConfidence: endpoint.paramConfidence,
+        paramEvidence: endpoint.paramEvidence,
+        hasRealSchema: true
+      };
+    } else {
+      console.log(`[AST] Discarded low-confidence parameter mapping for ${endpoint.method} ${endpoint.path} (confidence: ${confidence})`);
+    }
+  }
+
+  // Fallback logic
+  const registeredParams = new Set();
+  
+  if (endpoint.fullUrl) {
+    try {
+      const urlObj = new URL(endpoint.fullUrl);
+      urlObj.searchParams.forEach((val, key) => {
+        registeredParams.add(key);
+      });
+    } catch (e) {}
+  }
+  
+  if (paramMiner) {
+    const mined = paramMiner.getParameters(endpoint.fullUrl || endpoint.path);
+    mined.forEach(p => registeredParams.add(p));
+  }
+
+  registeredParams.forEach(name => {
+    if (pathParams.includes(name)) return;
+    
+    let location = 'query';
+    if (isStateChanging) {
+      location = 'body';
+    }
+    
+    parameters.push({
+      name,
+      location,
+      type: 'string',
+      fallback: getSmartFallback(name)
+    });
+  });
+
+  let fullUrl = endpoint.fullUrl;
+  if (!fullUrl) {
+    const base = resolvedUrl.endsWith('/') ? resolvedUrl.slice(0, -1) : resolvedUrl;
+    fullUrl = endpoint.path.startsWith('/') ? `${base}${endpoint.path}` : `${base}/${endpoint.path}`;
+  }
+
+  return {
+    url: fullUrl,
+    method: endpoint.method,
+    parameters,
+    hasRealSchema: false
+  };
+}
+
+function classifyEndpoint(schema, path) {
+  if (schema.parameters && schema.parameters.length > 0) {
+    return 1;
+  }
+
+  const method = (schema.method || 'GET').toUpperCase();
+  const isStateChanging = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+  
+  const keywords = [
+    'auth', 'login', 'register', 'token', 'session', 'signin', 'signup', 'password', // Auth
+    'upload', 'file', 'image', 'import', 'photo', // Upload
+    'account', 'profile', 'user', 'admin', // User details & administration
+    'order', 'cart', 'basket', 'checkout', 'payment', 'wallet', // Transactional
+    'search', 'find', 'query', 'filter', 'products', 'chat', 'complaint' // Interactive/Search
+  ];
+
+  const normalizedPath = (path || schema.url || '').toLowerCase();
+  const matchesKeywords = keywords.some(k => normalizedPath.includes(k.toLowerCase()));
+
+  if (isStateChanging || matchesKeywords) {
+    return 2;
+  }
+
+  return 3;
+}
+
 // ==========================================================================
 // Orchestrator and Redirect Chain Resolver
 // ==========================================================================
+
 
 async function resolveFinalUrl(urlStr, log) {
   let currentUrl = urlStr;
@@ -2762,40 +3574,156 @@ async function runWaptScan(targetUrl, authConfig = null, scanId = null) {
     __sessionManager: sessions.userA
   };
 
+  // Initialize scanContext
+  const scanContext = {
+    endpointsRegistry: endpoints,
+    discoveredParams: new Set(),
+    testedEndpoints: new Set(),
+    authHeaders,
+    storedXssTracker: []
+  };
+
+  // Populate discovered params from crawler search parameters
+  crawledEndpoints.forEach(e => {
+    try {
+      const parsed = new URL(e.fullUrl);
+      parsed.searchParams.forEach((val, key) => {
+        scanContext.discoveredParams.add(key);
+      });
+    } catch (err) {}
+  });
+
+  // Populate discovered params from mined JS endpoints (AST parameters)
+  endpoints.forEach(e => {
+    if (e.params && Array.isArray(e.params)) {
+      e.params.forEach(p => {
+        scanContext.discoveredParams.add(p.name);
+      });
+    }
+  });
+
   let allFindings = [...idorFindings];
 
-  const checkLogPairs = [
+  // target-level checks (run once on root resolvedUrl)
+  const targetCheckLogPairs = [
     { fn: checkSecurityHeaders },
     { fn: checkHttpMethods },
     { fn: checkSslTls },
     { fn: checkDirectoryEnumeration },
-    { fn: checkXss },
-    { fn: checkSqlInjection },
-    { fn: checkOpenRedirect },
     { fn: checkCors },
     { fn: checkCookieSecurity },
     { fn: checkServerBanner }
   ];
 
-  const promises = checkLogPairs.map(async (item) => {
+  const targetPromises = targetCheckLogPairs.map(async (item) => {
     const localLog = [];
     let findings;
     if (item.fn === checkSslTls) {
-      findings = await item.fn(resolvedUrl, localLog, redirectedToHttps, redirectInfo, authHeaders);
+      findings = await item.fn(resolvedUrl, localLog, redirectedToHttps, redirectInfo, scanContext);
     } else {
-      findings = await item.fn(resolvedUrl, localLog, authHeaders);
+      findings = await item.fn(resolvedUrl, localLog, scanContext);
     }
     return { findings, log: localLog };
   });
 
-  const results = await Promise.all(promises);
-  results.forEach(res => {
+  const targetResults = await Promise.all(targetPromises);
+  targetResults.forEach(res => {
     allFindings.push(...res.findings);
     log.push(...res.log);
-    if (res.findings && res.findings.testedParams) {
-      res.findings.testedParams.forEach(p => fuzzedParamsSet.add(p));
+  });
+
+  // Construct target schemas for discovered endpoints to perform asset-level parameter checks
+  const targetSchemas = [];
+
+  // Add root URL target schema
+  const rootSchema = normalizeTarget(resolvedUrl);
+  if (rootSchema) {
+    const rootParams = Array.from(scanContext.discoveredParams);
+    rootSchema.parameters = rootParams.map(name => ({
+      name,
+      location: 'query',
+      type: 'string'
+    }));
+    targetSchemas.push({ schema: rootSchema, path: '/', originalEp: { path: '/', method: 'GET' } });
+  }
+
+  // Map discovered endpoints
+  endpoints.forEach(ep => {
+    if (ep.path === '/' || ep.path === '') return;
+    const schema = createTargetSchema(ep, paramMiner, resolvedUrl);
+    targetSchemas.push({ schema, path: ep.path, originalEp: ep });
+  });
+
+  // Classify target schemas
+  let tier1Count = 0;
+  let tier2Count = 0;
+  let tier3Count = 0;
+  const candidates = [];
+  const skipped = [];
+
+  targetSchemas.forEach(item => {
+    const tier = classifyEndpoint(item.schema, item.path);
+    item.tier = tier;
+    if (tier === 1) {
+      tier1Count++;
+      candidates.push(item);
+    } else if (tier === 2) {
+      tier2Count++;
+      candidates.push(item);
+    } else {
+      tier3Count++;
+      skipped.push(item);
     }
   });
+
+  log.push(`[Discovery] ${endpoints.length} endpoints discovered`);
+  log.push(`[Discovery] ${candidates.length} candidate injection targets`);
+  log.push(`[Discovery] Classification -> Tier 1: ${tier1Count}, Tier 2: ${tier2Count}, Tier 3: ${tier3Count}`);
+
+  // Log skipped targets
+  skipped.forEach(item => {
+    log.push(`[Skip] ${item.path} (Tier3)`);
+  });
+
+  // Run XSS, SQLi, and OpenRedirect checkers on all candidate target schemas
+  const candidateCheckers = [checkXss, checkSqlInjection, checkOpenRedirect];
+  const candidatePromises = candidates.map(async (item) => {
+    const localLog = [];
+    const runPromises = candidateCheckers.map(async (fn) => {
+      const findings = await fn(item.schema, localLog, scanContext);
+      return { fn, findings };
+    });
+    const results = await Promise.all(runPromises);
+    
+    // Track tested endpoints
+    const epKey = `${item.schema.method || 'GET'}:${item.path}`;
+    scanContext.testedEndpoints.add(epKey);
+
+    const mergedFindings = [];
+    const testedParamsList = [];
+    results.forEach(r => {
+      mergedFindings.push(...r.findings);
+      if (r.findings && r.findings.testedParams) {
+        testedParamsList.push(...r.findings.testedParams);
+      }
+    });
+
+    return { findings: mergedFindings, log: localLog, testedParams: testedParamsList };
+  });
+
+  const candidateResults = await Promise.all(candidatePromises);
+  candidateResults.forEach(res => {
+    allFindings.push(...res.findings);
+    log.push(...res.log);
+    if (res.testedParams) {
+      res.testedParams.forEach(p => fuzzedParamsSet.add(p));
+    }
+  });
+
+  // Stored/Second-Order XSS revisit pass: re-fetch all GET-able pages and check whether
+  // any canary injected during the candidate checks (above) now appears on a different page.
+  const storedXssFindings = await runStoredXssRevisitPass(targetSchemas, scanContext, log);
+  allFindings.push(...storedXssFindings);
 
   const duration = Date.now() - startTime;
 
@@ -3095,6 +4023,15 @@ async function runWaptScan(targetUrl, authConfig = null, scanId = null) {
 
 module.exports = {
   runWaptScan,
-  rawRequest
+  rawRequest,
+  request,
+  normalizeTarget,
+  buildRequest,
+  checkXss,
+  checkSqlInjection,
+  checkOpenRedirect,
+  extractContext,
+  createTargetSchema,
+  classifyEndpoint
 };
 

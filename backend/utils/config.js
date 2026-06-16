@@ -1,3 +1,41 @@
+const fs = require('fs');
+const path = require('path');
+
+// Zero-dependency loading of local .env file
+try {
+  const envPath = path.join(__dirname, '../../.env');
+  if (fs.existsSync(envPath)) {
+    const envData = fs.readFileSync(envPath, 'utf8');
+    const lines = envData.split(/\r?\n/);
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      
+      const equalIndex = trimmed.indexOf('=');
+      if (equalIndex === -1) continue;
+      
+      const key = trimmed.slice(0, equalIndex).trim();
+      const val = trimmed.slice(equalIndex + 1).trim();
+      
+      if (key && process.env[key] === undefined) {
+        // Strip single or double quotes around the value
+        process.env[key] = val.replace(/^["']|["']$/g, '');
+      }
+    }
+  }
+} catch (e) {
+  // Silent fail
+}
+
+// Compute dynamic defaults in standard JavaScript before validation
+if (process.env.NODE_ENV === undefined) {
+  process.env.NODE_ENV = 'development';
+}
+
+if (process.env.ALLOW_LOCAL_SCANS === undefined) {
+  process.env.ALLOW_LOCAL_SCANS = process.env.NODE_ENV === 'production' ? 'false' : 'true';
+}
+
 const { z } = require('zod');
 
 const configSchema = z.object({
@@ -15,6 +53,7 @@ const parseResult = configSchema.safeParse({
   PORT: process.env.PORT,
   NODE_ENV: process.env.NODE_ENV,
   ALLOW_LOCAL_SCANS: process.env.ALLOW_LOCAL_SCANS,
+
   JWT_SECRET: process.env.JWT_SECRET,
   CLAUDE_API_KEY: process.env.CLAUDE_API_KEY,
   ADMIN_USERNAME: process.env.ADMIN_USERNAME,

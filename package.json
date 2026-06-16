@@ -10,6 +10,7 @@
   "dependencies": {
     "@babel/parser": "7.29.7",
     "@babel/traverse": "7.29.7",
+    "acorn": "^8.17.0",
     "adm-zip": "0.5.12",
     "bcryptjs": "3.0.3",
     "cors": "2.8.5",
